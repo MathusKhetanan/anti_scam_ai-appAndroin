@@ -1,0 +1,12 @@
+# .dart_code_metrics.yaml
+
+metrics:
+  unused-files:
+    exclude:
+      - test/**
+      - lib/main.dart
+      - lib/generated_plugin_registrant.dart
+      - lib/firebase_options.dart
+      - lib/**/routes.dart
+
+# คุณสามารถเพิ่ม rules อื่นภายหลังได้ เช่น complexity, naming, etc.

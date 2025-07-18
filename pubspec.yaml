@@ -1,0 +1,42 @@
+name: anti_scam_ai
+description: A lightweight anti-scam SMS detection app.
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Anti-Scam Core Packages
+  telephony: ^0.2.0
+  awesome_notifications: ^0.10.1
+  shared_preferences: ^2.1.1
+  google_fonts: ^6.2.1
+  permission_handler: ^11.0.1
+  url_launcher: ^6.1.7  # เพิ่ม url_launcher สำหรับเปิดลิงก์
+
+  # Local Database
+  sqflite: ^2.2.8+4
+  path: ^1.8.3
+  http: ^1.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  dart_code_metrics: ^5.7.0
+  flutter_launcher_icons: ^0.13.1
+
+dependency_overrides:
+  http: ^1.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/app_icon.jpg
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/app_icon.jpg"
