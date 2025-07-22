@@ -15,54 +15,60 @@ class _UserScreenState extends State<UserScreen> {
   bool _isLoggedIn = false;
   Map<String, dynamic>? _userProfile;
 
+  // Controllers for editing profile
+  final _fullNameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _dobController = TextEditingController();
+  final _addressController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _checkLoginStatusAndFetchProfile();
   }
 
- Future<void> _checkLoginStatusAndFetchProfile() async {
-  final user = supabase.auth.currentUser;
+  Future<void> _checkLoginStatusAndFetchProfile() async {
+    final user = supabase.auth.currentUser;
 
-  if (user == null) {
-    setState(() {
-      _isLoggedIn = false;
-      _isLoading = false;
-    });
-    return;
-  }
+    if (user == null) {
+      setState(() {
+        _isLoggedIn = false;
+        _isLoading = false;
+      });
+      return;
+    }
 
-  try {
-    final userProfile = await supabase
-      .from('profiles')
-      .select()
-      .eq('id', user.id)
-      .single();
+    try {
+final userProfile = await supabase
+    .from('profiles')
+    .select()
+    .eq('id', user.id)
+    .single();
 
-    if (userProfile == null) {
+
+      if (userProfile != null) {
+        _userProfile = Map<String, dynamic>.from(userProfile);
+        // Set controller values for editing
+        _fullNameController.text = _userProfile?['full_name'] ?? '';
+        _phoneController.text = _userProfile?['phone'] ?? '';
+        _dobController.text = _userProfile?['dob'] != null
+            ? (_userProfile!['dob'] as String).split('T').first
+            : '';
+        _addressController.text = _userProfile?['address'] ?? '';
+      }
+
+      setState(() {
+        _isLoggedIn = true;
+        _isLoading = false;
+      });
+    } catch (e) {
       setState(() {
         _userProfile = null;
         _isLoggedIn = true;
         _isLoading = false;
       });
-    } else {
-      setState(() {
-        _userProfile = Map<String, dynamic>.from(userProfile);
-        _isLoggedIn = true;
-        _isLoading = false;
-      });
     }
-  } catch (e) {
-    // error ดึงข้อมูล
-    setState(() {
-      _userProfile = null;
-      _isLoggedIn = true;
-      _isLoading = false;
-    });
   }
-}
-
-
 
   Future<void> _logout() async {
     await supabase.auth.signOut();
@@ -70,6 +76,86 @@ class _UserScreenState extends State<UserScreen> {
       _isLoggedIn = false;
       _userProfile = null;
     });
+  }
+
+  Future<void> _updateProfileData(String userId, Map<String, dynamic> profileData) async {
+final response = await supabase
+    .from('profiles')
+    .update(profileData)
+    .eq('id', userId); // ✅ ไม่ต้องใช้ .execute()
+
+
+    if (response.error != null) {
+      print('Failed to update profile: ${response.error!.message}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('อัปเดตข้อมูลล้มเหลว: ${response.error!.message}')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('อัปเดตข้อมูลเรียบร้อยแล้ว')),
+      );
+      await _checkLoginStatusAndFetchProfile();
+    }
+  }
+
+  void _showEditProfileDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('แก้ไขข้อมูลโปรไฟล์'),
+          content: SingleChildScrollView(
+            child: Column(
+              children: [
+                TextField(
+                  controller: _fullNameController,
+                  decoration: const InputDecoration(labelText: 'ชื่อ-นามสกุล'),
+                ),
+                TextField(
+                  controller: _phoneController,
+                  decoration: const InputDecoration(labelText: 'เบอร์โทรศัพท์'),
+                  keyboardType: TextInputType.phone,
+                ),
+                TextField(
+                  controller: _dobController,
+                  decoration: const InputDecoration(labelText: 'วันเกิด (YYYY-MM-DD)'),
+                ),
+                TextField(
+                  controller: _addressController,
+                  decoration: const InputDecoration(labelText: 'ที่อยู่'),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('ยกเลิก'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final user = supabase.auth.currentUser;
+                if (user == null) return;
+
+                final updatedData = {
+                  'full_name': _fullNameController.text.trim(),
+                  'phone': _phoneController.text.trim(),
+                  'dob': _dobController.text.trim(),
+                  'address': _addressController.text.trim(),
+                  'updated_at': DateTime.now().toIso8601String(),
+                };
+
+                Navigator.pop(context); // ปิด dialog ก่อนอัปเดต
+
+                await _updateProfileData(user.id, updatedData);
+              },
+              child: const Text('บันทึก'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -99,7 +185,6 @@ class _UserScreenState extends State<UserScreen> {
 
     final userName = _userProfile?['full_name'] ?? supabase.auth.currentUser!.email!;
     final userEmail = supabase.auth.currentUser!.email ?? '';
-    // สามารถเพิ่มฟิลด์อื่น ๆ จาก _userProfile ได้ตามต้องการ
 
     return Scaffold(
       appBar: AppBar(
@@ -114,7 +199,6 @@ class _UserScreenState extends State<UserScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('ออกจากระบบเรียบร้อย')),
               );
-              // กลับไปหน้า login หรือหน้าแรกถ้าต้องการ
               Navigator.pushReplacementNamed(context, '/login');
             },
           ),
@@ -145,11 +229,7 @@ class _UserScreenState extends State<UserScreen> {
             ElevatedButton.icon(
               icon: const Icon(Icons.edit),
               label: const Text('แก้ไขข้อมูล'),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('ฟีเจอร์กำลังพัฒนา')),
-                );
-              },
+              onPressed: _showEditProfileDialog,
             ),
           ],
         ),

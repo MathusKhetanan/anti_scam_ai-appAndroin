@@ -23,6 +23,12 @@ subprojects {
     }
 }
 
+// ✅ เพิ่ม plugin สำหรับ Firebase Google Services
+plugins {
+    id("com.google.gms.google-services") version "4.4.0" apply false
+}
+
+// ✅ เพิ่ม task clean
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }

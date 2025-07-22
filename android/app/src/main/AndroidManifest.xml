@@ -2,75 +2,93 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.example.anti_scam_ai">
 
-    <!-- Permissions ที่จำเป็น -->
-<uses-permission android:name="android.permission.INTERNET" />
-<!-- เอา maxSdkVersion ออกเพื่อให้ทำงานได้ใน Android ทุกเวอร์ชัน -->
-<uses-permission android:name="android.permission.READ_SMS" />
-<uses-permission android:name="android.permission.RECEIVE_SMS" />
-<uses-permission android:name="android.permission.READ_PHONE_STATE" />
-<uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-<uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" tools:ignore="ProtectedPermissions" />
-<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
+    <!-- Permissions with special bindings -->
+    <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" />
+    <uses-permission
+        android:name="android.permission.BIND_ACCESSIBILITY_SERVICE"
+        tools:ignore="ProtectedPermissions" />
+
     <application
         android:label="anti_scam_ai"
         android:icon="@mipmap/ic_launcher"
-        android:enableOnBackInvokedCallback="true">
+        android:enableOnBackInvokedCallback="true"
+        tools:node="merge">
 
-        <!-- Firebase Notification Channel (ถ้ามีใช้ FCM) -->
+        <!-- Firebase Notification Channel -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="basic_channel" />
 
-        <!-- Main Activity -->
+        <!-- Flutter Embedding -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
+        <!-- MainActivity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize">
-            <meta-data
-                android:name="io.flutter.embedding.android.NormalTheme"
-                android:resource="@style/NormalTheme" />
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode">
+
+            <!-- Launcher intent -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Supabase OAuth redirect -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="io.supabase.flutter" android:host="login-callback" />
+            </intent-filter>
+
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
         </activity>
 
-        <meta-data
-            android:name="flutterEmbedding"
-            android:value="2" />
-
-        <!-- Awesome Notifications Service -->
+        <!-- Notifications -->
         <service
             android:name="me.carda.awesome_notifications.AwesomeNotificationsService"
             android:enabled="true"
             android:exported="false"
             android:stopWithTask="false" />
 
-        <!-- SMS Receiver สำหรับ telephony package -->
-<receiver
-    android:name="com.shounakmulay.telephony.sms.SmsReceiver"
-    android:exported="true"
-    android:enabled="true">
-    <intent-filter android:priority="1000">
-        <action android:name="android.provider.Telephony.SMS_RECEIVED" />
-        <category android:name="android.intent.category.DEFAULT" />
-    </intent-filter>
-</receiver>
+        <!-- SMS Receiver -->
+        <receiver
+            android:name="com.shounakmulay.telephony.sms.SmsReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter android:priority="1000">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
 
-        <!-- Foreground Service (จาก telephony package) -->
+        <!-- Foreground Service -->
         <service
             android:name="com.jhomlala.telephony.ForegroundService"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync"
+            android:enabled="true"
+            android:exported="false" />
 
-        <!-- Accessibility Service สำหรับตรวจสอบข้อความจาก UI -->
+        <!-- Accessibility Service -->
         <service
             android:name=".MyAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
@@ -83,20 +101,19 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <!-- เพิ่ม NotificationListenerService สำหรับฟัง Notification จากแอปอื่น -->
-       <service
-    android:name=".NotificationListenerServiceImpl"
-    android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-    android:exported="true">
-    <intent-filter>
-        <action android:name="android.service.notification.NotificationListenerService" />
-    </intent-filter>
-</service>
-
+        <!-- Notification Listener -->
+        <service
+            android:name=".NotificationListenerServiceImpl"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
     </application>
 
-    <!-- Queries สำหรับ Android 11+ เพื่อให้แอปสามารถค้นหาหรือเปิด intent ที่ใช้ในระบบ -->
+    <!-- Android 11+: Allow specific intent queries -->
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW" />
@@ -111,4 +128,5 @@
             <data android:mimeType="text/plain" />
         </intent>
     </queries>
+
 </manifest>

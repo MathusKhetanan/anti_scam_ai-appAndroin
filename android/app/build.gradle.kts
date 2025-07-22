@@ -1,13 +1,14 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    id("dev.flutter.flutter-gradle-plugin") // Flutter plugin ต้องอยู่ล่างสุดตามที่คุณใส่ไว้แล้ว
+    id("com.google.gms.google-services") // ✅ เพิ่ม plugin สำหรับ Firebase
+    id("dev.flutter.flutter-gradle-plugin") // Flutter plugin ควรอยู่ล่างสุด
 }
 
 android {
     namespace = "com.example.anti_scam_ai"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "25.2.9519653"
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -20,14 +21,14 @@ android {
 
     defaultConfig {
         applicationId = "com.example.anti_scam_ai"
-        minSdk = 23 // Android 6.0 เพื่อให้รองรับ runtime permission
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
     sourceSets {
-        getByName("main").java.srcDirs("src/main/kotlin") // **เพิ่มตรงนี้เพื่อให้รู้จัก kotlin source**
+        getByName("main").java.srcDirs("src/main/kotlin")
     }
 
     buildTypes {
@@ -39,4 +40,10 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // ✅ เพิ่ม Firebase Auth และ Google Sign-in
+    implementation("com.google.firebase:firebase-auth-ktx:22.3.0")
+    implementation("com.google.android.gms:play-services-auth:21.0.0")
 }

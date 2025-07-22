@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "724135108704",
+    "project_id": "project-96e9d",
+    "storage_bucket": "project-96e9d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:724135108704:android:ddfc02fe950bb55409a305",
+        "android_client_info": {
+          "package_name": "com.example.anti_scam_ai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB05Y6W5iq2e8sg4lF_exMJu3G1enULoXw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
