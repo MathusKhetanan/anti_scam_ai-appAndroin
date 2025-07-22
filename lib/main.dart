@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'screens/permission/permission_screen.dart'; // import ไฟล์ permission_screen.dart
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'screens/auth/register_screen.dart';
+
+import 'screens/auth/login_screen.dart';
+import 'screens/permission/permission_screen.dart';
 import 'screens/main/main_screen.dart';
 import 'screens/main/home_screen.dart';
 import 'screens/main/scan_screen.dart';
@@ -18,8 +22,14 @@ const MethodChannel methodChannel = MethodChannel('message_monitor');
 // EventChannel สำหรับรับข้อความจาก native
 const EventChannel eventChannel = EventChannel('message_monitor_event');
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: 'https://zcqubcxrnwehbtvvxuip.supabase.co', // ← ใส่ URL จริงของคุณ
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpjcXViY3hybndlaGJ0dnZ4dWlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI4MDM1MzYsImV4cCI6MjA2ODM3OTUzNn0.ETtbrZJ-asQDaVOUdCNLFfzLG9bLA70QyCwiBIePWGo',               // ← ใส่ anon key จาก Supabase
+  );
+
   runApp(const MyApp());
 }
 
@@ -43,7 +53,6 @@ class _MyAppState extends State<MyApp> {
     try {
       final granted = await methodChannel.invokeMethod<bool>('requestPermissions');
       if (granted == false) {
-        // ถ้ายังไม่ได้เปิด Notification Listener ให้เปิดหน้าตั้งค่า
         await methodChannel.invokeMethod('requestNotificationListenerPermission');
       }
     } on PlatformException catch (e) {
@@ -79,6 +88,8 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
+    final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
+
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: themeModeNotifier,
       builder: (context, currentThemeMode, child) {
@@ -97,14 +108,16 @@ class _MyAppState extends State<MyApp> {
             useMaterial3: true,
           ),
           themeMode: currentThemeMode,
-          initialRoute: '/',
+          initialRoute: isLoggedIn ? '/' : '/login', // 🔁 เช็กสถานะผู้ใช้
           routes: {
-            '/': (context) => MainScreen(themeModeNotifier: themeModeNotifier),
-            '/home': (context) => const HomeScreen(),
-            '/scan': (context) => const ScanScreen(),
-            '/stats': (context) => StatsScreen(),
-            '/permission': (context) => const PermissionScreen(),
-            '/settings': (context) => SettingsScreen(themeModeNotifier: themeModeNotifier),
+  '/': (context) => MainScreen(themeModeNotifier: themeModeNotifier),
+  '/login': (context) => const LoginScreen(),
+  '/register': (context) => RegisterScreen(),  // <-- เพิ่มตรงนี้
+  '/home': (context) => const HomeScreen(),
+  '/scan': (context) => const ScanScreen(),
+  '/stats': (context) => StatsScreen(),
+  '/permission': (context) => const PermissionScreen(),
+  '/settings': (context) => SettingsScreen(themeModeNotifier: themeModeNotifier),
           },
         );
       },

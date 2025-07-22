@@ -40,6 +40,11 @@
             label: 'ตั้งค่า',
             tooltip: 'ตั้งค่าการแจ้งเตือนและกฎการตรวจจับ',
           ),
+          BottomNavigationBarItem(
+          icon: Icon(Icons.person),
+          label: 'ผู้ใช้',
+          tooltip: 'เข้าสู่ระบบ / บัญชีผู้ใช้',
+        ),
         ],
       );
     }
