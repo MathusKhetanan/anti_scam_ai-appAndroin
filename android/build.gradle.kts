@@ -1,3 +1,15 @@
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle:7.4.2")
+        classpath("com.google.gms:google-services:4.4.0") // Firebase Google Services plugin
+    }
+}
+
 allprojects {
     repositories {
         google()
@@ -5,30 +17,29 @@ allprojects {
     }
 }
 
-val newBuildDir: Directory = rootProject.layout.buildDirectory.dir("../../build").get()
-rootProject.layout.buildDirectory.value(newBuildDir)
+// กำหนดตำแหน่ง build directory (ถ้าต้องการเปลี่ยน)
+val newBuildDir = rootProject.layout.buildDirectory.dir("../../build").get()
+rootProject.layout.buildDirectory.set(newBuildDir)
 
 subprojects {
-    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
-    project.layout.buildDirectory.value(newSubprojectBuildDir)
+    val newSubprojectBuildDir = newBuildDir.dir(project.name)
+    project.layout.buildDirectory.set(newSubprojectBuildDir)
 }
 
 subprojects {
-    project.evaluationDependsOn(":app")
-
     tasks.withType<JavaCompile>().configureEach {
-        sourceCompatibility = JavaVersion.VERSION_11.toString()
-        targetCompatibility = JavaVersion.VERSION_11.toString()
+        sourceCompatibility = "11"
+        targetCompatibility = "11"
         options.compilerArgs.add("-Xlint:-options") // ซ่อน warning ชั่วคราว
     }
 }
 
-// ✅ เพิ่ม plugin สำหรับ Firebase Google Services
+// ลง plugin google-services แต่ยังไม่ apply ที่ root
 plugins {
     id("com.google.gms.google-services") version "4.4.0" apply false
 }
 
-// ✅ เพิ่ม task clean
+// task clean
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }

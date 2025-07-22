@@ -16,8 +16,9 @@ dependencies:
   google_fonts: ^6.2.1
   permission_handler: ^11.0.1
   url_launcher: ^6.1.7  # เพิ่ม url_launcher สำหรับเปิดลิงก์
-  firebase_core: ^2.30.0
-  firebase_auth: ^4.17.4
+  firebase_core: ^2.10.0
+  firebase_auth: ^4.4.0
+  cloud_firestore: ^4.5.0
   google_sign_in: ^6.0.0
   # Local Database
   sqflite: ^2.2.8+4

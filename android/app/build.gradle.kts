@@ -33,7 +33,8 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            // ปกติควรเซ็ต signingConfigs ที่นี่ สำหรับ release build (แก้ตามจริงถ้าต้องการ)
+            signingConfig = signingConfigs.getByName("debug") 
         }
     }
 }
@@ -43,7 +44,7 @@ flutter {
 }
 
 dependencies {
-    // ✅ เพิ่ม Firebase Auth และ Google Sign-in
+    // ✅ Firebase Authentication และ Google Sign-in
     implementation("com.google.firebase:firebase-auth-ktx:22.3.0")
     implementation("com.google.android.gms:play-services-auth:21.0.0")
 }

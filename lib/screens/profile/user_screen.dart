@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class UserScreen extends StatefulWidget {
   const UserScreen({super.key});
@@ -9,7 +10,8 @@ class UserScreen extends StatefulWidget {
 }
 
 class _UserScreenState extends State<UserScreen> {
-  final supabase = Supabase.instance.client;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   bool _isLoading = true;
   bool _isLoggedIn = false;
@@ -28,7 +30,7 @@ class _UserScreenState extends State<UserScreen> {
   }
 
   Future<void> _checkLoginStatusAndFetchProfile() async {
-    final user = supabase.auth.currentUser;
+    final user = _auth.currentUser;
 
     if (user == null) {
       setState(() {
@@ -39,21 +41,14 @@ class _UserScreenState extends State<UserScreen> {
     }
 
     try {
-final userProfile = await supabase
-    .from('profiles')
-    .select()
-    .eq('id', user.id)
-    .single();
+      final docSnapshot = await _firestore.collection('profiles').doc(user.uid).get();
 
+      if (docSnapshot.exists) {
+        _userProfile = docSnapshot.data();
 
-      if (userProfile != null) {
-        _userProfile = Map<String, dynamic>.from(userProfile);
-        // Set controller values for editing
         _fullNameController.text = _userProfile?['full_name'] ?? '';
         _phoneController.text = _userProfile?['phone'] ?? '';
-        _dobController.text = _userProfile?['dob'] != null
-            ? (_userProfile!['dob'] as String).split('T').first
-            : '';
+        _dobController.text = _userProfile?['dob'] ?? '';
         _addressController.text = _userProfile?['address'] ?? '';
       }
 
@@ -71,7 +66,7 @@ final userProfile = await supabase
   }
 
   Future<void> _logout() async {
-    await supabase.auth.signOut();
+    await _auth.signOut();
     setState(() {
       _isLoggedIn = false;
       _userProfile = null;
@@ -79,22 +74,17 @@ final userProfile = await supabase
   }
 
   Future<void> _updateProfileData(String userId, Map<String, dynamic> profileData) async {
-final response = await supabase
-    .from('profiles')
-    .update(profileData)
-    .eq('id', userId); // ✅ ไม่ต้องใช้ .execute()
+    try {
+      await _firestore.collection('profiles').doc(userId).update(profileData);
 
-
-    if (response.error != null) {
-      print('Failed to update profile: ${response.error!.message}');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('อัปเดตข้อมูลล้มเหลว: ${response.error!.message}')),
-      );
-    } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('อัปเดตข้อมูลเรียบร้อยแล้ว')),
       );
       await _checkLoginStatusAndFetchProfile();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('อัปเดตข้อมูลล้มเหลว: $e')),
+      );
     }
   }
 
@@ -135,7 +125,7 @@ final response = await supabase
             ),
             ElevatedButton(
               onPressed: () async {
-                final user = supabase.auth.currentUser;
+                final user = _auth.currentUser;
                 if (user == null) return;
 
                 final updatedData = {
@@ -148,7 +138,7 @@ final response = await supabase
 
                 Navigator.pop(context); // ปิด dialog ก่อนอัปเดต
 
-                await _updateProfileData(user.id, updatedData);
+                await _updateProfileData(user.uid, updatedData);
               },
               child: const Text('บันทึก'),
             ),
@@ -183,8 +173,8 @@ final response = await supabase
       );
     }
 
-    final userName = _userProfile?['full_name'] ?? supabase.auth.currentUser!.email!;
-    final userEmail = supabase.auth.currentUser!.email ?? '';
+    final userName = _userProfile?['full_name'] ?? _auth.currentUser!.email!;
+    final userEmail = _auth.currentUser!.email ?? '';
 
     return Scaffold(
       appBar: AppBar(
