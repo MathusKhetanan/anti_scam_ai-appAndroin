@@ -1,5 +1,6 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:backendless_sdk/backendless_sdk.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -16,6 +17,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
 
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -25,22 +29,53 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _loading = true);
 
     try {
-      BackendlessUser user = BackendlessUser()
-        ..email = email
-        ..password = password;
-
-      await Backendless.userService.register(user);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('สมัครสมาชิกสำเร็จ!'),
-          backgroundColor: Colors.green,
-        ),
+      // Create user
+      final UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
       );
 
-      // TODO: นำทางไปหน้าอื่น เช่น หน้าล็อกอิน หรือหน้า Home
-      // Navigator.pushReplacementNamed(context, '/login');
+      final user = userCredential.user;
+      if (user != null) {
+        // Save to Firestore using email as Document ID
+        final userDoc = _firestore.collection('users').doc(email);
+        final docSnapshot = await userDoc.get();
 
+        if (!docSnapshot.exists) {
+          await userDoc.set({
+            'uid': user.uid,
+            'email': email,
+            'provider': 'email',
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        }
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('สมัครสมาชิกสำเร็จ!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Navigate to home
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, '/home');
+      }
+    } on FirebaseAuthException catch (e) {
+      String message = 'เกิดข้อผิดพลาด';
+      if (e.code == 'email-already-in-use') {
+        message = 'อีเมลนี้มีบัญชีอยู่แล้ว';
+      } else {
+        message = e.message ?? message;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+        ),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -93,6 +128,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 child: _loading
                     ? const CircularProgressIndicator()
                     : const Text('สมัครสมาชิก'),
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+                child: const Text('มีบัญชีอยู่แล้ว? เข้าสู่ระบบ'),
               ),
             ],
           ),

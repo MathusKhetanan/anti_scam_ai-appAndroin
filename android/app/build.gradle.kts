@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.anti_scam_ai"
+    namespace = "com.example.anti_scam_ai"  // กำหนด namespace ที่นี่
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "27.0.12077973"
 
@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.anti_scam_ai"
-        minSdk = 23
+        minSdk = 27  // ปรับเป็น 27 ตามคำแนะนำจาก `backendless_sdk`
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

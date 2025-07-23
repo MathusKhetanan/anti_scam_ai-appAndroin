@@ -1,4 +1,3 @@
-
 buildscript {
     repositories {
         google()
@@ -32,11 +31,6 @@ subprojects {
         targetCompatibility = "11"
         options.compilerArgs.add("-Xlint:-options") // ซ่อน warning ชั่วคราว
     }
-}
-
-// ลง plugin google-services แต่ยังไม่ apply ที่ root
-plugins {
-    id("com.google.gms.google-services") version "4.4.0" apply false
 }
 
 // task clean

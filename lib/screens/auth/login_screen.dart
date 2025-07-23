@@ -2,8 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-
-import '../main/home_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';  // เพิ่ม Firestore
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,19 +11,33 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin {
+class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
-
-  // Animation controllers และอื่นๆ เหมือนเดิม (ถ้าต้องการใช้)
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance; // Firestore instance
 
   @override
-  void initState() {
-    super.initState();
-    // initialize animation controllers ถ้ามี
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveUserToFirestore(User user) async {
+    final userDoc = _firestore.collection('users').doc(user.uid);
+    final doc = await userDoc.get();
+
+    if (!doc.exists) {
+      await userDoc.set({
+        'uid': user.uid,
+        'email': user.email,
+        'createdAt': FieldValue.serverTimestamp(),
+        'provider': user.providerData.isNotEmpty ? user.providerData[0].providerId : 'unknown',
+      });
+    }
   }
 
   Future<void> _login() async {
@@ -34,8 +47,6 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       final email = _emailController.text.trim();
       final password = _passwordController.text;
 
-      print('พยายามเข้าสู่ระบบด้วยอีเมล: $email');
-
       final UserCredential userCredential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
@@ -44,14 +55,12 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       final user = userCredential.user;
 
       if (user != null && mounted) {
-        print('เข้าสู่ระบบสำเร็จสำหรับ user: ${user.email}');
+        await _saveUserToFirestore(user);
         await _showSuccessAndNavigate();
       }
     } on FirebaseAuthException catch (e) {
-      print('เข้าสู่ระบบล้มเหลว: ${e.message}');
       _showErrorSnackBar('เข้าสู่ระบบล้มเหลว: ${e.message}');
     } catch (e) {
-      print('เกิดข้อผิดพลาดบางอย่าง: $e');
       _showErrorSnackBar('เกิดข้อผิดพลาดบางอย่าง');
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -63,25 +72,21 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
 
     try {
       if (kIsWeb) {
-        // สำหรับ web
-        GoogleAuthProvider googleProvider = GoogleAuthProvider();
-
+        final googleProvider = GoogleAuthProvider();
         final userCredential = await _auth.signInWithPopup(googleProvider);
 
         if (userCredential.user != null && mounted) {
+          await _saveUserToFirestore(userCredential.user!);
           await _showSuccessAndNavigate();
         }
       } else {
-        // สำหรับมือถือ
-        final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-
+        final googleUser = await GoogleSignIn().signIn();
         if (googleUser == null) {
-          // User canceled the sign-in
           setState(() => _isLoading = false);
           return;
         }
 
-        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        final googleAuth = await googleUser.authentication;
 
         final credential = GoogleAuthProvider.credential(
           accessToken: googleAuth.accessToken,
@@ -91,6 +96,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         final userCredential = await _auth.signInWithCredential(credential);
 
         if (userCredential.user != null && mounted) {
+          await _saveUserToFirestore(userCredential.user!);
           await _showSuccessAndNavigate();
         }
       }
@@ -101,60 +107,74 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     }
   }
 
-  Future<void> _showSuccessAndNavigate() async {
-    // โค้ดแสดง dialog หรือ animation เหมือนเดิม หรือแค่ navigate ไปหน้าหลักเลยก็ได้
-    if (!mounted) return;
+Future<void> _showSuccessAndNavigate() async {
+  if (!mounted) return;
 
-    Navigator.pushReplacementNamed(context, '/home');
-  }
+  // แสดง Dialog แจ้งเตือน
+  await showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('เข้าสู่ระบบสำเร็จ'),
+      content: const Text('คุณได้เข้าสู่ระบบเรียบร้อยแล้ว'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('ตกลง'),
+        ),
+      ],
+    ),
+  );
+
+  // เมื่อกดตกลงแล้วเปลี่ยนหน้าไป /home
+  Navigator.pushReplacementNamed(context, '/home');
+}
+
 
   void _showErrorSnackBar(String message) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
             const Icon(Icons.error, color: Colors.white),
             const SizedBox(width: 8),
-            Expanded(child: Text(message)),
+            Expanded(child: Text(message, style: const TextStyle(color: Colors.white))),
           ],
         ),
-        backgroundColor: Colors.red,
+        backgroundColor: isDark ? Colors.red[400] : Colors.red,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
 
   @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    // dispose animation controllers ถ้ามี
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('เข้าสู่ระบบ')),
+      backgroundColor: theme.scaffoldBackgroundColor,
+      appBar: AppBar(
+        title: Text('เข้าสู่ระบบ', style: textTheme.titleLarge),
+        backgroundColor: theme.appBarTheme.backgroundColor,
+        iconTheme: theme.iconTheme,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 36),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // UI เหมือนเดิม
-            // TextFields, ปุ่ม login, ปุ่ม google sign in
             TextField(
               controller: _emailController,
+              style: textTheme.bodyMedium,
               decoration: InputDecoration(
                 labelText: 'อีเมล',
+                labelStyle: textTheme.bodySmall,
                 prefixIcon: const Icon(Icons.email),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: theme.primaryColor, width: 2),
@@ -165,12 +185,12 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
             const SizedBox(height: 16),
             TextField(
               controller: _passwordController,
+              style: textTheme.bodyMedium,
               decoration: InputDecoration(
                 labelText: 'รหัสผ่าน',
+                labelStyle: textTheme.bodySmall,
                 prefixIcon: const Icon(Icons.lock),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: theme.primaryColor, width: 2),
@@ -178,23 +198,29 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
               ),
               obscureText: true,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => Navigator.pushNamed(context, '/reset-password'),
+                child: Text(
+                  'ลืมรหัสผ่าน?',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.secondary,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             _isLoading
-                ? Center(
-                    child: Column(
-                      children: [
-                        CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            theme.primaryColor,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'กำลังเข้าสู่ระบบ...',
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                      ],
-                    ),
+                ? Column(
+                    children: [
+                      CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(theme.primaryColor),
+                      ),
+                      const SizedBox(height: 16),
+                      Text('กำลังเข้าสู่ระบบ...', style: textTheme.bodySmall?.copyWith(color: theme.hintColor)),
+                    ],
                   )
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -204,34 +230,31 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                         child: ElevatedButton(
                           onPressed: _login,
                           style: ElevatedButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             backgroundColor: theme.colorScheme.primary,
-                            foregroundColor: Colors.white,
-                            elevation: 2,
+                            foregroundColor: theme.colorScheme.onPrimary,
                           ),
-                          child: const Text(
-                            'เข้าสู่ระบบ',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                          child: const Text('เข้าสู่ระบบ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                         ),
                       ),
                       const SizedBox(height: 16),
                       SizedBox(
                         height: 48,
                         child: OutlinedButton.icon(
-                          icon: Image.asset('assets/google_icon.png', height: 24),
-                          label: const Text('เข้าสู่ระบบด้วย Google'),
+                          icon: Image.asset(
+                            theme.brightness == Brightness.dark
+                                ? 'assets/google_icon.png'
+                                : 'assets/google_icon.png',
+                            height: 24,
+                          ),
+                          label: Text(
+                            'เข้าสู่ระบบด้วย Google',
+                            style: textTheme.bodyMedium,
+                          ),
                           onPressed: _signInWithGoogle,
                           style: OutlinedButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            side: BorderSide(color: Colors.grey[300]!),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            side: BorderSide(color: theme.dividerColor),
                           ),
                         ),
                       ),
@@ -240,14 +263,12 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
             const SizedBox(height: 16),
             Center(
               child: TextButton(
-                onPressed: () {
-                  Navigator.pushNamed(context, '/register');
-                },
+                onPressed: () => Navigator.pushNamed(context, '/register'),
                 child: Text(
                   'ยังไม่มีบัญชี? สมัครสมาชิก',
-                  style: TextStyle(
-                    color: theme.primaryColor,
-                    fontWeight: FontWeight.w500,
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),

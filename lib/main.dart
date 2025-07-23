@@ -5,13 +5,14 @@ import 'firebase_options.dart'; // Firebase config
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/permission/permission_screen.dart';
-import 'package:anti_scam_ai/screens/auth/forgot_password_screen.dart';
+
 import 'screens/main/main_screen.dart';
 import 'screens/main/home_screen.dart';
 import 'screens/main/scan_screen.dart';
 import 'screens/stats/stats_screen.dart';
 import 'screens/profile/settings_screen.dart';
 import 'screens/profile/user_screen.dart';
+import 'package:anti_scam_ai/screens/auth/reset_password_screen.dart';
 
 // Global ThemeMode notifier
 final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.system);
@@ -118,7 +119,7 @@ class _MyAppState extends State<MyApp> {
               '/permission': (context) => const PermissionScreen(),
               '/profile': (context) => const UserScreen(),
               '/settings': (context) => SettingsScreen(themeModeNotifier: themeModeNotifier),
-              '/forgot-password': (context) => const ForgotPasswordScreen(),
+              '/reset-password': (context) => const ResetPasswordScreen(), // ✅ ต้องมีบรรทัดนี้!
             },
         );
       },
