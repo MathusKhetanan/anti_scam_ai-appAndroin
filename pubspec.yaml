@@ -45,7 +45,8 @@ flutter:
   assets:
     - assets/images/app_icon.jpg
     - assets/google_icon.png
-
+    - assets/sms_model.tflite
+    - assets/tokenizer.json
 flutter_icons:
   android: true
   ios: true
