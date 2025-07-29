@@ -5,7 +5,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 class SettingsScreen extends StatefulWidget {
   final ValueNotifier<ThemeMode> themeModeNotifier;
-
   const SettingsScreen({super.key, required this.themeModeNotifier});
 
   @override

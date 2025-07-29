@@ -1,51 +1,51 @@
 import 'package:flutter/material.dart';
-
-import 'home_screen.dart' as home_screen;
-import 'scan_screen.dart' as scan_screen;
-import 'package:anti_scam_ai/screens/stats/stats_screen.dart' as stats_screen;
-import '../profile/settings_screen.dart' as settings_screen;
-import '../profile/user_screen.dart' as user_screen; // ✅ เพิ่มหน้าผู้ใช้
-import '../widgets/app_navigation.dart';
+import 'home_screen.dart';
+import 'scan_screen.dart';
+import 'stats_screen.dart';
+import 'settings_screen.dart';
+import 'user_screen.dart';
+import 'bottom_nav_bar.dart';
 
 class MainScreen extends StatefulWidget {
-  final ValueNotifier<ThemeMode> themeModeNotifier;
+  final ValueNotifier<ThemeMode> themeModeNotifier;  // เพิ่มรับตัวนี้
 
-  const MainScreen({super.key, required this.themeModeNotifier});
+  const MainScreen({super.key, required this.themeModeNotifier});  // แก้ constructor
 
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _selectedIndex = 0;
+  int _currentIndex = 0;
 
   late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
+    // สร้าง list ของหน้าจอ พร้อมส่ง themeModeNotifier ไปให้ SettingsScreen
     _screens = [
-      const home_screen.HomeScreen(),                       // หน้า 0
-      const scan_screen.ScanScreen(),                       // หน้า 1
-      const stats_screen.StatsScreen(),                     // หน้า 2
-      settings_screen.SettingsScreen(                       // หน้า 3
-        themeModeNotifier: widget.themeModeNotifier,
-      ),
-      const user_screen.UserScreen(),                       // ✅ หน้า 4: ผู้ใช้
+      const HomeScreen(),
+      const ScanScreen(),
+      const StatsScreen(),
+      SettingsScreen(themeModeNotifier: widget.themeModeNotifier),  // ส่งพารามิเตอร์
+      const UserScreen(),
     ];
+  }
+
+  void _onTabSelected(int index) {
+    setState(() {
+      _currentIndex = index;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_selectedIndex],
-      bottomNavigationBar: AppNavigation(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
+      body: _screens[_currentIndex],
+      bottomNavigationBar: BottomNavBar(
+        currentIndex: _currentIndex,
+        onTap: _onTabSelected,
       ),
     );
   }

@@ -16,7 +16,7 @@ import io.flutter.plugin.common.EventChannel
 class MainActivity : FlutterActivity() {
 
     private val METHOD_CHANNEL = "message_monitor"
-    private val EVENT_CHANNEL = "com.papkung.antiscamai/accessibility"
+    private val EVENT_CHANNEL = "com.example.anti_scam_ai/accessibility" // ✅ แก้ให้ตรงกับ package name
     private val SMS_PERMISSION_REQUEST_CODE = 1001
     private val NOTIFICATION_PERMISSION_REQUEST_CODE = 1002
 
@@ -29,9 +29,15 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        
+        // ✅ Log เพื่อตรวจสอบว่า MainActivity ทำงาน
+        android.util.Log.d("MainActivity", "🚀 configureFlutterEngine called!")
+        android.util.Log.d("MainActivity", "📱 METHOD_CHANNEL: $METHOD_CHANNEL")
+        android.util.Log.d("MainActivity", "📺 EVENT_CHANNEL: $EVENT_CHANNEL")
 
         // ตั้ง MethodChannel สำหรับจัดการ permission ต่างๆ
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL).setMethodCallHandler { call, result ->
+            android.util.Log.d("MainActivity", "🎯 Method called: ${call.method}")
             when (call.method) {
                 "checkPermissions" -> {
                     val smsGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
@@ -56,6 +62,16 @@ class MainActivity : FlutterActivity() {
                 "requestSmsPermission" -> {
                     requestSmsPermissions(result)
                 }
+                "requestNotificationListenerPermission" -> {
+                    try {
+                        val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        startActivity(intent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("error", "Failed to open notification listener settings: ${e.message}", null)
+                    }
+                }
                 "requestNotificationPermission" -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         val notificationGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
@@ -75,16 +91,6 @@ class MainActivity : FlutterActivity() {
                         }
                     } else {
                         result.success(true)
-                    }
-                }
-                "requestNotificationListenerPermission" -> {
-                    try {
-                        val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                        startActivity(intent)
-                        result.success(true)
-                    } catch (e: Exception) {
-                        result.error("error", "Failed to open notification listener settings: ${e.message}", null)
                     }
                 }
                 "requestAccessibilityPermission" -> {
@@ -113,10 +119,14 @@ class MainActivity : FlutterActivity() {
         }
 
         // ตั้ง EventChannel
+        android.util.Log.d("MainActivity", "📺 Setting up EventChannel: $EVENT_CHANNEL")
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL).setStreamHandler(
             object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    android.util.Log.d("MainActivity", "🔊 EventChannel onListen called!")
                     sharedEventSink = events
+                    // ✅ ส่งข้อความทดสอบเมื่อ EventChannel เชื่อมต่อสำเร็จ
+                    events?.success("🔥 EventChannel เชื่อมต่อสำเร็จแล้ว!")
                 }
 
                 override fun onCancel(arguments: Any?) {
@@ -189,5 +199,10 @@ class MainActivity : FlutterActivity() {
                 super.onRequestPermissionsResult(requestCode, permissions, grantResults)
             }
         }
+    }
+
+    // ✅ ฟังก์ชันสำหรับ test ส่งข้อความจาก Native
+    fun sendTestMessage() {
+        sharedEventSink?.success("📱 ข้อความทดสอบจาก Native Android!")
     }
 }
