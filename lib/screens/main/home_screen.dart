@@ -1,1015 +1,236 @@
-import 'package:flutter/foundation.dart' show kIsWeb, compute;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:telephony/telephony.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-// เปลี่ยนจาก GeminiApi เป็น SmsModelService
-import 'package:anti_scam_ai/services/sms_model_service.dart';
-
-// ฟังก์ชันสำหรับประมวลผลใน Isolate (ต้องอยู่นอก class)
-Future<List<Map<String, String>>> isolateSMSProcessing(
-    Map<String, dynamic> params) async {
-  final List<Map<String, dynamic>> messagesData = 
-      List<Map<String, dynamic>>.from(params['messages']);
-  final Map<String, Map<String, String>> cache = 
-      Map<String, Map<String, String>>.from(params['cache'] ?? {});
-  
-  final List<Map<String, String>> results = [];
-
-  // สร้าง SmsModelService instance ใน isolate
-  final SmsModelService modelService = SmsModelService();
-  await modelService.loadModelAndTokenizer();
-
-  for (final msgData in messagesData) {
-    final content = msgData['body'] as String? ?? '';
-    if (content.trim().isEmpty) continue;
-
-    // ตรวจสอบ cache ก่อน
-    if (cache.containsKey(content)) {
-      results.add(Map<String, String>.from(cache[content]!));
-      continue;
-    }
-
-    try {
-      // เรียกโมเดล TFLite วิเคราะห์
-      final double score = modelService.predict(content);
-      final bool isScam = score > 0.5; // เกณฑ์ที่ 0.5
-      final String reason = 'โมเดล AI วิเคราะห์ (คะแนน: ${score.toStringAsFixed(3)})';
-
-      final result = {
-        'time': _formatMessageTimeFromTimestamp(msgData['date'] as int?),
-        'content': content,
-        'result': isScam ? 'Scam' : 'Safe',
-        'reason': reason,
-        'app': 'SMS',
-        'score': score.toStringAsFixed(3), // เพิ่มคะแนนเพื่อแสดงผล
-      };
-
-      results.add(result);
-    } catch (e) {
-      final result = {
-        'time': _formatMessageTimeFromTimestamp(msgData['date'] as int?),
-        'content': content,
-        'result': 'Unknown',
-        'reason': 'ไม่สามารถวิเคราะห์ได้: ${e.toString()}',
-        'app': 'SMS',
-        'score': '0.000',
-      };
-      results.add(result);
-    }
-  }
-
-  return results;
-}
-
-// Helper function สำหรับ isolate
-String _formatMessageTimeFromTimestamp(int? timestamp) {
-  if (timestamp == null) return '--:--';
-  return DateTime.fromMillisecondsSinceEpoch(timestamp)
-      .toLocal()
-      .toString()
-      .substring(11, 16);
-}
+import '../models/scan_result.dart';
+import '../services/sms_model_service.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  static const MethodChannel _methodChannel = MethodChannel('message_monitor');
-  static const EventChannel accessibilityEventChannel =
-      EventChannel('com.papkung.antiscamai/accessibility');
-
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+  final Telephony telephony = Telephony.instance;
+  List<ScanResult> scanResults = [];
+  bool isLoading = false;
   bool protectionEnabled = true;
+  bool modelReady = false;
+  
+  // สถิติ
   int messagesCheckedToday = 0;
-  bool _loadingAI = false;
-  bool _modelReady = false;
-
-  // เพิ่ม SmsModelService
-  final SmsModelService _smsModelService = SmsModelService();
-
-  final List<Map<String, String>> recentScans = [];
-  final List<String> scamAlertsFromAccessibility = [];
-
-  // ลดจำนวนข้อความเริ่มต้นเพื่อความเร็ว
-  static const int MAX_MESSAGES_TO_PROCESS = 10;
-  static const int BATCH_SIZE = 5;
-
-  // Cache สำหรับเก็บผลลัพธ์ที่เคยประมวลผลแล้ว
-  Map<String, Map<String, String>> _scanCache = {};
+  int scamDetectedToday = 0;
+  int safeMessagesToday = 0;
+  
+  // Cache
+  Map<String, ScanResult> _scanCache = {};
   SharedPreferences? _prefs;
-
+  
+  // Animation Controllers
+  late AnimationController _refreshController;
+  late AnimationController _statsController;
+  
   @override
   void initState() {
     super.initState();
+    _initAnimations();
     _initCache();
-    _initModelAndLoadData(); // เปลี่ยนจาก _loadInitialData
-    if (!kIsWeb) {
-      _initAccessibilityListener();
-    }
+    _loadModelAndData();
   }
-
+  
   @override
   void dispose() {
+    _refreshController.dispose();
+    _statsController.dispose();
     _saveCache();
     super.dispose();
   }
-
-  // เพิ่มฟังก์ชันโหลดโมเดลและข้อมูล
-  Future<void> _initModelAndLoadData() async {
-    if (_loadingAI) return;
-
-    setState(() {
-      _loadingAI = true;
-    });
-
-    try {
-      if (!kIsWeb) {
-        // โหลดโมเดล TFLite
-        await _smsModelService.loadModelAndTokenizer();
-        setState(() => _modelReady = true);
-      }
-
-      await _loadInitialData();
-    } catch (e) {
-      _showError('เกิดข้อผิดพลาดในการโหลดโมเดล: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _loadingAI = false);
-      }
-    }
+  
+  void _initAnimations() {
+    _refreshController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    );
+    _statsController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
   }
-
-  // เริ่มต้น cache และโหลดจาก SharedPreferences
+  
   Future<void> _initCache() async {
     try {
       _prefs = await SharedPreferences.getInstance();
       final cacheString = _prefs?.getString('sms_scan_cache') ?? '{}';
       final cacheData = json.decode(cacheString) as Map<String, dynamic>;
-      _scanCache = cacheData.map((key, value) => 
-          MapEntry(key, Map<String, String>.from(value)));
+      
+      _scanCache = cacheData.map((key, value) {
+        final data = Map<String, dynamic>.from(value);
+        return MapEntry(key, ScanResult(
+          id: data['id'] ?? '',
+          sender: data['sender'] ?? '',
+          message: data['message'] ?? '',
+          isScam: data['isScam'] ?? false,
+          dateTime: DateTime.parse(data['dateTime'] ?? DateTime.now().toIso8601String()),
+          score: (data['score'] ?? 0.0).toDouble(),
+          reason: data['reason'] ?? '',
+        ));
+      });
     } catch (e) {
       debugPrint('Error loading cache: $e');
       _scanCache = {};
     }
   }
-
-  // บันทึก cache ลง SharedPreferences
+  
   Future<void> _saveCache() async {
     try {
-      final cacheString = json.encode(_scanCache);
+      final cacheData = _scanCache.map((key, value) => MapEntry(key, {
+        'id': value.id,
+        'sender': value.sender,
+        'message': value.message,
+        'isScam': value.isScam,
+        'dateTime': value.dateTime.toIso8601String(),
+        'score': value.score,
+        'reason': value.reason,
+      }));
+      
+      final cacheString = json.encode(cacheData);
       await _prefs?.setString('sms_scan_cache', cacheString);
     } catch (e) {
       debugPrint('Error saving cache: $e');
     }
   }
-
-  // แก้ไข logic การขอ Permission
-  Future<bool> _requestPermissions() async {
-    try {
-      final Map<dynamic, dynamic>? result =
-          await _methodChannel.invokeMethod('checkPermissions');
-
-      final smsGranted = result?['sms'] == true;
-      final phoneGranted = result?['phone'] == true;
-
-      if (!smsGranted) {
-        final granted = await _methodChannel.invokeMethod('requestSmsPermission');
-        return granted == true;
-      }
-      return smsGranted && phoneGranted;
-    } catch (e) {
-      debugPrint('Permission request failed: $e');
-      return false;
-    }
-  }
-
-  Future<void> _loadInitialData() async {
-    try {
-      if (kIsWeb) {
-        await _loadWebDemoData();
-        return;
-      }
-
-      final hasPermission = await _requestPermissions();
-      if (!hasPermission) {
-        _showPermissionError();
-        return;
-      }
-
-      if (_modelReady) {
-        await _loadSMSDataOptimized();
-      } else {
-        _showError('โมเดล AI ยังไม่พร้อมใช้งาน');
-      }
-    } catch (e) {
-      _showError('เกิดข้อผิดพลาดในการโหลดข้อมูล: $e');
-    }
-  }
-
-  Future<void> _loadWebDemoData() async {
-    await Future.delayed(const Duration(seconds: 1));
-    if (!mounted) return;
+  
+  Future<void> _loadModelAndData() async {
+    if (isLoading) return;
     
     setState(() {
-      messagesCheckedToday = 3;
-      recentScans.clear();
-      recentScans.addAll([
-        {
-          'time': '10:15',
-          'content': 'นี่คือตัวอย่างข้อความสแกมบนเว็บ',
-          'result': 'Scam',
-          'reason': 'โมเดล AI วิเคราะห์ (คะแนน: 0.856)',
-          'app': 'Web Demo',
-          'score': '0.856',
-        },
-        {
-          'time': '09:30',
-          'content': 'ข้อความปลอดภัยตัวอย่าง',
-          'result': 'Safe',
-          'reason': 'โมเดล AI วิเคราะห์ (คะแนน: 0.123)',
-          'app': 'Web Demo',
-          'score': '0.123',
-        },
-        {
-          'time': '08:00',
-          'content': 'ข้อความต้องสงสัยตัวอย่าง',
-          'result': 'Scam',
-          'reason': 'โมเดล AI วิเคราะห์ (คะแนน: 0.789)',
-          'app': 'Web Demo',
-          'score': '0.789',
-        },
-      ]);
+      isLoading = true;
     });
-  }
-
-  // ใช้ compute() สำหรับประมวลผล SMS ใน background isolate
-  Future<void> _loadSMSDataOptimized() async {
-    final Telephony telephony = Telephony.instance;
-    final List<SmsMessage> messages = await telephony
-        .getInboxSms(columns: [SmsColumn.BODY, SmsColumn.DATE]);
-
-    // จำกัดจำนวนข้อความที่จะประมวลผล
-    final messagesToProcess = messages.take(MAX_MESSAGES_TO_PROCESS).toList();
     
-    // แปลง SmsMessage เป็น Map เพื่อส่งไป isolate
-    final messagesData = messagesToProcess.map((msg) => {
-      'body': msg.body,
-      'date': msg.date,
-    }).toList();
-
-    // เตรียมข้อมูลส่งไป isolate
-    final params = {
-      'messages': messagesData,
-      'cache': _scanCache,
-    };
-
+    _refreshController.repeat();
+    
     try {
-      // ใช้ compute() เพื่อประมวลผลใน background
-      final List<Map<String, String>> scans = 
-          await compute(isolateSMSProcessing, params);
-
-      // อัปเดต cache ด้วยผลลัพธ์ใหม่
-      for (final scan in scans) {
-        final content = scan['content'] ?? '';
-        if (content.isNotEmpty && !_scanCache.containsKey(content)) {
-          _scanCache[content] = scan;
+      // โหลดโมเดล AI
+      await SMSModelService.instance.loadModel();
+      setState(() => modelReady = true);
+      
+      // โหลดและวิเคราะห์ข้อความ
+      await _loadAndAnalyzeSMS();
+      
+      _statsController.forward();
+    } catch (e) {
+      _showError('เกิดข้อผิดพลาดในการโหลดโมเดล: $e');
+    } finally {
+      _refreshController.stop();
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
+  }
+  
+  Future<void> _loadAndAnalyzeSMS() async {
+    try {
+      bool permissionGranted = await telephony.requestPhoneAndSmsPermissions;
+      if (!permissionGranted) {
+        _showError('ไม่ได้รับสิทธิ์เข้าถึง SMS');
+        return;
+      }
+      
+      final messages = await telephony.getInboxSms(
+        columns: [SmsColumn.ADDRESS, SmsColumn.BODY, SmsColumn.DATE],
+        sortOrder: [OrderBy(SmsColumn.DATE, sort: Sort.DESC)],
+        limit: 100,
+      );
+      
+      List<ScanResult> results = [];
+      int scamCount = 0;
+      int safeCount = 0;
+      
+      for (var msg in messages) {
+        final sender = msg.address ?? 'ไม่ทราบเบอร์';
+        final text = msg.body ?? '';
+        final date = DateTime.fromMillisecondsSinceEpoch(msg.date ?? 0);
+        
+        if (text.trim().isEmpty) continue;
+        
+        ScanResult result;
+        
+        // ตรวจสอบ cache ก่อน
+        if (_scanCache.containsKey(text)) {
+          result = _scanCache[text]!;
+        } else {
+          // วิเคราะห์ข้อความด้วย AI
+          final analysisResult = await SMSModelService.instance.analyze(text);
+          
+          result = ScanResult(
+            id: msg.id.toString(),
+            sender: sender,
+            message: text,
+            isScam: analysisResult.isScam,
+            dateTime: date,
+            score: analysisResult.score,
+            reason: 'โมเดล AI วิเคราะห์ (คะแนน: ${analysisResult.score.toStringAsFixed(3)})',
+          );
+          
+          // เพิ่มเข้า cache
+          _scanCache[text] = result;
+        }
+        
+        results.add(result);
+        
+        if (result.isScam) {
+          scamCount++;
+        } else {
+          safeCount++;
         }
       }
-
-      // บันทึก cache
-      await _saveCache();
-
+      
       if (mounted) {
         setState(() {
-          messagesCheckedToday = scans.length;
-          recentScans.clear();
-          recentScans.addAll(scans);
+          scanResults = results;
+          messagesCheckedToday = results.length;
+          scamDetectedToday = scamCount;
+          safeMessagesToday = safeCount;
         });
+        
+        await _saveCache();
       }
     } catch (e) {
-      debugPrint('Error in optimized SMS loading: $e');
-      // fallback เป็นวิธีเดิม
-      await _loadSMSDataFallback();
+      _showError('เกิดข้อผิดพลาดในการโหลดข้อความ: $e');
     }
   }
-
-  // Fallback method สำหรับกรณีที่ compute() ไม่ทำงาน
-  Future<void> _loadSMSDataFallback() async {
-    final Telephony telephony = Telephony.instance;
-    final List<SmsMessage> messages = await telephony
-        .getInboxSms(columns: [SmsColumn.BODY, SmsColumn.DATE]);
-
-    final messagesToProcess = messages.take(MAX_MESSAGES_TO_PROCESS).toList();
-    List<Map<String, String>> scans = [];
-
-    // ประมวลผลทีละชุดเพื่อไม่ให้ UI หยุดตอบสนอง
-    for (int i = 0; i < messagesToProcess.length; i += BATCH_SIZE) {
-      final batch = messagesToProcess.skip(i).take(BATCH_SIZE).toList();
-      final batchResults = await _processSMSBatchWithTFLite(batch);
-      scans.addAll(batchResults);
-
-      // Progressive UI update
-      if (mounted) {
-        setState(() {
-          messagesCheckedToday = scans.length;
-          recentScans.clear();
-          recentScans.addAll(scans);
-        });
-      }
-
-      // หยุดพักเล็กน้อยเพื่อให้ UI ตอบสนอง
-      await Future.delayed(const Duration(milliseconds: 100));
-    }
-
-    // บันทึก cache
-    await _saveCache();
-  }
-
-  // เปลี่ยนจาก _processSMSBatchWithCache เป็น _processSMSBatchWithTFLite
-  Future<List<Map<String, String>>> _processSMSBatchWithTFLite(
-      List<SmsMessage> messages) async {
-    List<Map<String, String>> results = [];
-    
-    for (final msg in messages) {
-      final content = msg.body ?? '';
-      if (content.trim().isEmpty) continue;
-
-      // ตรวจสอบ cache ก่อน
-      if (_scanCache.containsKey(content)) {
-        results.add(Map<String, String>.from(_scanCache[content]!));
-        continue;
-      }
-
-      try {
-        // เรียกโมเดล TFLite วิเคราะห์
-        final double score = _smsModelService.predict(content);
-        final bool isScam = score > 0.5; // เกณฑ์ที่ 0.5
-        final String reason = 'โมเดล AI วิเคราะห์ (คะแนน: ${score.toStringAsFixed(3)})';
-
-        final result = {
-          'time': _formatMessageTime(msg.date),
-          'content': content,
-          'result': isScam ? 'Scam' : 'Safe',
-          'reason': reason,
-          'app': 'SMS',
-          'score': score.toStringAsFixed(3),
-        };
-
-        // เพิ่มเข้า cache
-        _scanCache[content] = result;
-        results.add(result);
-      } catch (e) {
-        debugPrint('Error analyzing message with TFLite: $e');
-        final result = {
-          'time': _formatMessageTime(msg.date),
-          'content': content,
-          'result': 'Unknown',
-          'reason': 'ไม่สามารถวิเคราะห์ได้: ${e.toString()}',
-          'app': 'SMS',
-          'score': '0.000',
-        };
-        _scanCache[content] = result;
-        results.add(result);
-      }
-    }
-    
-    return results;
-  }
-
-  String _formatMessageTime(int? timestamp) {
-    if (timestamp == null) return '--:--';
-    return DateTime.fromMillisecondsSinceEpoch(timestamp)
-        .toLocal()
-        .toString()
-        .substring(11, 16);
-  }
-
-  void _showPermissionError() {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('ไม่ได้รับสิทธิ์เข้าถึง SMS หรือ โทรศัพท์'),
-        backgroundColor: Colors.red,
-      ),
-    );
-  }
-
+  
   void _showError(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
-
-  void _initAccessibilityListener() {
-    accessibilityEventChannel.receiveBroadcastStream().listen(
-      (event) {
-        try {
-          final Map<String, dynamic> data = Map<String, dynamic>.from(event);
-          final String scamText = data['text'] ?? '';
-          final String appPackage = data['app'] ?? 'unknown';
-
-          if (scamText.isNotEmpty && mounted && _modelReady) {
-            // วิเคราะห์ข้อความจาก accessibility service ด้วย TFLite
-            try {
-              final double score = _smsModelService.predict(scamText);
-              final bool isScam = score > 0.5;
-              
-              if (isScam) {
-                setState(() {
-                  scamAlertsFromAccessibility.add('[$appPackage] $scamText');
-                  recentScans.insert(0, {
-                    'time': TimeOfDay.now().format(context),
-                    'content': scamText,
-                    'result': 'Scam',
-                    'reason': 'โมเดル AI วิเคราะห์ (คะแนน: ${score.toStringAsFixed(3)})',
-                    'app': appPackage,
-                    'score': score.toStringAsFixed(3),
-                  });
-                });
-              }
-            } catch (e) {
-              debugPrint('Error analyzing accessibility message: $e');
-            }
-          }
-        } catch (e) {
-          debugPrint('Error parsing accessibility event: $e');
-        }
-      },
-      onError: (error) {
-        debugPrint('Accessibility Event Channel Error: $error');
-      },
-    );
-  }
-
+  
   void _toggleProtection() {
     setState(() {
       protectionEnabled = !protectionEnabled;
     });
-  }
-
-  void _navigateToScan() => Navigator.pushNamed(context, '/scan');
-  void _navigateToStats() => Navigator.pushNamed(context, '/stats');
-  void _navigateToSettings() => Navigator.pushNamed(context, '/settings');
-
-  // เพิ่มฟังก์ชันสำหรับโหลดข้อความเพิ่มเติม
-  Future<void> _loadMoreMessages() async {
-    if (_loadingAI || !_modelReady) return;
-
-    setState(() {
-      _loadingAI = true;
-    });
-
-    try {
-      final Telephony telephony = Telephony.instance;
-      final List<SmsMessage> messages = await telephony
-          .getInboxSms(columns: [SmsColumn.BODY, SmsColumn.DATE]);
-
-      // โหลดข้อความเพิ่มเติม (ข้ามที่โหลดไปแล้ว)
-      final messagesToProcess = messages
-          .skip(recentScans.length)
-          .take(MAX_MESSAGES_TO_PROCESS)
-          .toList();
-
-      if (messagesToProcess.isNotEmpty) {
-        final additionalResults = await _processSMSBatchWithTFLite(messagesToProcess);
-        
-        if (mounted) {
-          setState(() {
-            messagesCheckedToday += additionalResults.length;
-            recentScans.addAll(additionalResults);
-          });
-        }
-        
-        await _saveCache();
-      }
-    } catch (e) {
-      _showError('เกิดข้อผิดพลาดในการโหลดข้อความเพิ่มเติม: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _loadingAI = false);
-      }
-    }
-  }
-
-  // เพิ่มฟังก์ชันสำหรับล้าง cache
-  Future<void> _clearCache() async {
-    _scanCache.clear();
-    await _prefs?.remove('sms_scan_cache');
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('ล้างแคชเรียบร้อยแล้ว'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
-  }
-
-  String _resolveAppName(String? package) {
-    if (package == null) return 'ไม่ทราบ';
-    const appNames = {
-      'com.linecorp.line': 'LINE',
-      'com.facebook.orca': 'Messenger',
-      'com.whatsapp': 'WhatsApp',
-      'com.google.android.gm': 'Gmail',
-      'com.android.messaging': 'ข้อความ',
-      'com.sec.android.app.messaging': 'ข้อความ Samsung',
-    };
-    return appNames[package] ?? package;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scamsToday = recentScans.where((e) => e['result'] == 'Scam').length;
-    final safeCount = recentScans.where((e) => e['result'] == 'Safe').length;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Anti-Scam AI', style: GoogleFonts.kanit()),
-        actions: [
-          // แสดงสถานะโมเดล
-          if (!_modelReady && !kIsWeb)
-            Container(
-              margin: const EdgeInsets.only(right: 8),
-              child: const Icon(
-                Icons.warning,
-                color: Colors.orange,
-              ),
-            ),
-          IconButton(
-            icon: Icon(protectionEnabled ? Icons.shield : Icons.shield_outlined),
-            onPressed: _toggleProtection,
-            tooltip: protectionEnabled ? 'ป้องกันเปิดอยู่' : 'ป้องกันปิดอยู่',
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'scan':
-                  _navigateToScan();
-                case 'stats':
-                  _navigateToStats();
-                case 'settings':
-                  _navigateToSettings();
-                case 'clear_cache':
-                  _clearCache();
-                case 'reload_model':
-                  _initModelAndLoadData();
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 'scan', child: Text('ตรวจสอบ')),
-              const PopupMenuItem(value: 'stats', child: Text('สถิติ')),
-              const PopupMenuItem(value: 'settings', child: Text('ตั้งค่า')),
-              const PopupMenuItem(value: 'clear_cache', child: Text('ล้างแคช')),
-              const PopupMenuItem(value: 'reload_model', child: Text('โหลดโมเดลใหม่')),
-            ],
-          ),
-        ],
-      ),
-      body: _loadingAI
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: 16),
-                  Text(
-                    _modelReady 
-                        ? 'กำลังประมวลผลข้อความ...'
-                        : 'กำลังโหลดโมเดล AI...',
-                    style: GoogleFonts.kanit(fontSize: 16),
-                  ),
-                  if (messagesCheckedToday > 0)
-                    Text(
-                      'ประมวลผลแล้ว $messagesCheckedToday ข้อความ',
-                      style: GoogleFonts.kanit(fontSize: 14, color: Colors.grey),
-                    ),
-                ],
-              ),
-            )
-          : RefreshIndicator(
-              onRefresh: _initModelAndLoadData, // เปลี่ยนจาก _loadInitialData
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildGreeting(),
-                    const SizedBox(height: 16),
-                    _buildModelStatus(), // เพิ่มสถานะโมเดล
-                    const SizedBox(height: 16),
-                    _buildRealTimeScamAlerts(),
-                    const SizedBox(height: 16),
-                    _buildProtectionStatus(scamsToday),
-                    const SizedBox(height: 24),
-                    _buildSecurityScore(scamsToday, safeCount),
-                    const SizedBox(height: 24),
-                    _buildScanButton(),
-                    const SizedBox(height: 24),
-                    _buildSummary(scamsToday, safeCount),
-                    const SizedBox(height: 24),
-                    _buildRecentScansList(),
-                    const SizedBox(height: 16),
-                    _buildLoadMoreButton(),
-                  ],
-                ),
-              ),
-            ),
-    );
-  }
-
-  Widget _buildGreeting() => Text(
-        '👋 ยินดีต้อนรับกลับ!',
-        style: GoogleFonts.kanit(fontSize: 18, fontWeight: FontWeight.w600),
-      );
-
-  // เพิ่มแสดงสถานะโมเดล
-  Widget _buildModelStatus() {
-    if (kIsWeb) return const SizedBox.shrink();
     
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _modelReady ? Colors.green.shade100 : Colors.orange.shade100,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: _modelReady ? Colors.green : Colors.orange,
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          protectionEnabled ? 'เปิดระบบป้องกันแล้ว' : 'ปิดระบบป้องกันแล้ว',
         ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            _modelReady ? Icons.check_circle : Icons.hourglass_empty,
-            color: _modelReady ? Colors.green : Colors.orange,
-            size: 20,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            _modelReady 
-                ? '✅ โมเดล AI พร้อมใช้งาน'
-                : '⏳ กำลังโหลดโมเดล AI...',
-            style: GoogleFonts.kanit(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: _modelReady ? Colors.green.shade800 : Colors.orange.shade800,
-            ),
-          ),
-        ],
+        backgroundColor: protectionEnabled ? Colors.green : Colors.orange,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
-
-  Widget _buildRealTimeScamAlerts() {
-    if (scamAlertsFromAccessibility.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.red.shade100,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '🚨 แจ้งเตือนข้อความต้องสงสัย (เรียลไทม์)',
-            style: GoogleFonts.kanit(
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-              color: Colors.red.shade800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          ...scamAlertsFromAccessibility.map(
-            (text) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text(
-                text,
-                style: GoogleFonts.kanit(fontSize: 13, color: Colors.red.shade900),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProtectionStatus(int scamsToday) {
-    String statusText;
-    Color statusColor;
-
-    if (!_modelReady && !kIsWeb) {
-      statusText = '⏳ โมเดล AI กำลังโหลด กรุณารอสักครู่';
-      statusColor = Colors.orange;
-    } else if (!protectionEnabled) {
-      statusText = '❌ ระบบป้องกันปิดอยู่ กรุณาเปิดเพื่อความปลอดภัย';
-      statusColor = Colors.red;
-    } else if (scamsToday > 0) {
-      statusText = '⚠️ ตรวจพบข้อความต้องสงสัย $scamsToday รายการ';
-      statusColor = Colors.orange;
-    } else {
-      statusText = '✅ ระบบป้องกันกำลังทำงาน และไม่พบภัยอันตรายวันนี้';
-      statusColor = Colors.green;
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: statusColor.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: statusColor),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            statusColor == Colors.green
-                ? Icons.check_circle
-                : (statusColor == Colors.orange ? Icons.warning : Icons.error),
-            color: statusColor,
-            size: 24,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              statusText,
-              style: GoogleFonts.kanit(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: statusColor,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSecurityScore(int scamsToday, int safeCount) {
-    final total = safeCount + scamsToday;
-    final score = total == 0 ? 100 : (safeCount / total) * 100;
-    final scoreColor =
-        score > 80 ? Colors.green : (score > 50 ? Colors.orange : Colors.red);
-
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(Icons.security, size: 40, color: scoreColor),
-            const SizedBox(width: 20),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('คะแนนความปลอดภัยวันนี้',
-                    style: GoogleFonts.kanit(
-                        fontSize: 16, fontWeight: FontWeight.w700)),
-                Text('${score.toStringAsFixed(0)}%',
-                    style: GoogleFonts.kanit(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: scoreColor,
-                    )),
-                if (!_modelReady && !kIsWeb)
-                  Text('(โมเดลยังไม่พร้อม)',
-                      style: GoogleFonts.kanit(
-                          fontSize: 12, color: Colors.grey)),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildScanButton() => SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
-          icon: const Icon(Icons.refresh),
-          label: Text('สแกนข้อความใหม่', style: GoogleFonts.kanit(fontSize: 16)),
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-          onPressed: (_loadingAI || (!_modelReady && !kIsWeb)) ? null : _initModelAndLoadData,
-        ),
-      );
-
-  Widget _buildLoadMoreButton() => SizedBox(
-        width: double.infinity,
-        child: OutlinedButton.icon(
-          icon: const Icon(Icons.expand_more),
-          label: Text('โหลดข้อความเพิ่มเติม', style: GoogleFonts.kanit(fontSize: 16)),
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-          onPressed: (_loadingAI || (!_modelReady && !kIsWeb)) ? null : _loadMoreMessages,
-        ),
-      );
-
-  Widget _buildSummary(int scamsToday, int safeCount) => Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 3,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _statTile('ตรวจทั้งหมด', '$messagesCheckedToday'),
-              const SizedBox(width: 24),
-              _statTile('ข้อความต้องสงสัย', '$scamsToday'),
-              const SizedBox(width: 24),
-              _statTile('ข้อความปลอดภัย', '$safeCount'),
-              const SizedBox(width: 24),
-              _statTile('แคชไว้', '${_scanCache.length}'),
-              const SizedBox(width: 24),
-              _statTile('โมเดล', _modelReady ? 'พร้อม' : 'รอ...'),
-            ],
-          ),
-        ),
-      ),
-    );
-
-  Widget _statTile(String label, String value) => Column(
-      children: [
-        Text(value,
-            style: GoogleFonts.kanit(fontSize: 20, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
-        Text(label,
-            style: GoogleFonts.kanit(fontSize: 13, color: Colors.grey[700])),
-      ],
-    );
-
-  Widget _buildRecentScansList() => Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('ตรวจล่าสุด',
-            style: GoogleFonts.kanit(fontSize: 18, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 14),
-        if (recentScans.isEmpty)
-          Text(
-            'ยังไม่มีการตรวจสอบวันนี้',
-            style: GoogleFonts.kanit(fontSize: 14, color: Colors.grey[600]),
-          )
-        else
-          ListView.separated(
-            physics: const NeverScrollableScrollPhysics(),
-            shrinkWrap: true,
-            itemCount: recentScans.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final item = recentScans[index];
-              final isScam = item['result'] == 'Scam';
-              final isUnknown = item['result'] == 'Unknown';
-              final score = double.tryParse(item['score'] ?? '0.0') ?? 0.0;
-              
-              return Card(
-                margin: const EdgeInsets.symmetric(vertical: 4),
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(12),
-                  leading: CircleAvatar(
-                    backgroundColor: isScam 
-                        ? Colors.red.withOpacity(0.2)
-                        : isUnknown 
-                            ? Colors.grey.withOpacity(0.2)
-                            : Colors.green.withOpacity(0.2),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          isScam 
-                              ? Icons.warning
-                              : isUnknown 
-                                  ? Icons.help_outline
-                                  : Icons.check_circle,
-                          color: isScam 
-                              ? Colors.red
-                              : isUnknown 
-                                  ? Colors.grey
-                                  : Colors.green,
-                          size: 16,
-                        ),
-                        if (!isUnknown)
-                          Text(
-                            score.toStringAsFixed(2),
-                            style: GoogleFonts.kanit(
-                              fontSize: 8,
-                              fontWeight: FontWeight.bold,
-                              color: isScam ? Colors.red : Colors.green,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  title: Text(
-                    item['content'] ?? '',
-                    style: GoogleFonts.kanit(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 4),
-                      Text(
-                        item['reason'] ?? '',
-                        style: GoogleFonts.kanit(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Text(
-                            '${item['time']} • ${_resolveAppName(item['app'])}',
-                            style: GoogleFonts.kanit(
-                              fontSize: 11,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isScam 
-                                  ? Colors.red.withOpacity(0.1)
-                                  : isUnknown 
-                                      ? Colors.grey.withOpacity(0.1)
-                                      : Colors.green.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isScam 
-                                    ? Colors.red.withOpacity(0.3)
-                                    : isUnknown 
-                                        ? Colors.grey.withOpacity(0.3)
-                                        : Colors.green.withOpacity(0.3),
-                              ),
-                            ),
-                            child: Text(
-                              isScam 
-                                  ? 'ต้องสงสัย'
-                                  : isUnknown 
-                                      ? 'ไม่ทราบ'
-                                      : 'ปลอดภัย',
-                              style: GoogleFonts.kanit(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: isScam 
-                                    ? Colors.red
-                                    : isUnknown 
-                                        ? Colors.grey[700]
-                                        : Colors.green,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  onTap: () => _showMessageDetailDialog(context, item, isScam, isUnknown),
-                ),
-              );
-            },
-          ),
-      ],
-    );
-
-  // แยกฟังก์ชัน dialog ออกมาเพื่อความเป็นระเบียบ
-  void _showMessageDetailDialog(BuildContext context, Map<String, String> item, bool isScam, bool isUnknown) {
-    final score = double.tryParse(item['score'] ?? '0.0') ?? 0.0;
-    
+  
+  void _showMessageDetail(ScanResult result) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1022,125 +243,44 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                'ข้อความ:',
-                style: GoogleFonts.kanit(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 4),
+              _buildDetailRow('ผู้ส่ง:', result.sender),
+              const SizedBox(height: 12),
+              _buildDetailRow('ข้อความ:', result.message),
+              const SizedBox(height: 12),
+              _buildDetailRow('เวลา:', _formatDateTime(result.dateTime)),
+              const SizedBox(height: 12),
+              _buildDetailRow('คะแนนความเสี่ยง:', result.score.toStringAsFixed(3)),
+              const SizedBox(height: 12),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                ),
-                child: Text(
-                  item['content'] ?? '',
-                  style: GoogleFonts.kanit(fontSize: 13),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'ผลการวิเคราะห์:',
-                style: GoogleFonts.kanit(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: isScam 
+                  color: result.isScam 
                       ? Colors.red.withOpacity(0.1)
-                      : isUnknown 
-                          ? Colors.grey.withOpacity(0.1)
-                          : Colors.green.withOpacity(0.1),
+                      : Colors.green.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isScam 
-                        ? Colors.red.withOpacity(0.3)
-                        : isUnknown 
-                            ? Colors.grey.withOpacity(0.3)
-                            : Colors.green.withOpacity(0.3),
+                    color: result.isScam ? Colors.red : Colors.green,
                   ),
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      item['reason'] ?? '',
-                      style: GoogleFonts.kanit(fontSize: 13),
+                    Icon(
+                      result.isScam ? Icons.warning : Icons.check_circle,
+                      color: result.isScam ? Colors.red : Colors.green,
+                      size: 24,
                     ),
-                    if (!isUnknown) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.analytics,
-                              size: 16,
-                              color: isScam ? Colors.red : Colors.green,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'คะแนนความเสี่ยง: ${score.toStringAsFixed(3)}',
-                              style: GoogleFonts.kanit(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: isScam ? Colors.red : Colors.green,
-                              ),
-                            ),
-                          ],
-                        ),
+                    const SizedBox(height: 8),
+                    Text(
+                      result.isScam ? 'ข้อความต้องสงสัย' : 'ข้อความปลอดภัย',
+                      style: GoogleFonts.kanit(
+                        fontWeight: FontWeight.w600,
+                        color: result.isScam ? Colors.red : Colors.green,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        score > 0.5 
-                            ? 'คะแนน > 0.5 = ข้อความต้องสงสัย'
-                            : 'คะแนน ≤ 0.5 = ข้อความปลอดภัย',
-                        style: GoogleFonts.kanit(
-                          fontSize: 11,
-                          color: Colors.grey[600],
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ],
+                    ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildDetailRow('เวลา:', item['time'] ?? '--:--'),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildDetailRow('แอป:', _resolveAppName(item['app'])),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              _buildDetailRow('สถานะ:', isScam 
-                  ? 'ต้องสงสัย'
-                  : isUnknown 
-                      ? 'ไม่ทราบ'
-                      : 'ปลอดภัย'),
-              if (_modelReady) ...[
-                const SizedBox(height: 8),
-                _buildDetailRow('วิธีการ:', 'โมเดล TensorFlow Lite'),
-              ],
             ],
           ),
         ),
@@ -1156,8 +296,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
-  // Helper widget สำหรับแสดงข้อมูลในรูปแบบแถว
+  
   Widget _buildDetailRow(String label, String value) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1170,14 +309,499 @@ class _HomeScreenState extends State<HomeScreen> {
             color: Colors.grey[700],
           ),
         ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: GoogleFonts.kanit(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
+        const SizedBox(height: 4),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.grey.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            value,
+            style: GoogleFonts.kanit(fontSize: 13),
           ),
         ),
+      ],
+    );
+  }
+  
+  String _formatDateTime(DateTime dateTime) {
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    final securityScore = messagesCheckedToday == 0 
+        ? 100.0 
+        : (safeMessagesToday / messagesCheckedToday) * 100;
+    
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          'Anti-Scam AI',
+          style: GoogleFonts.kanit(fontWeight: FontWeight.w600),
+        ),
+        actions: [
+          // สถานะโมเดล
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            child: Icon(
+              modelReady ? Icons.smart_toy : Icons.hourglass_empty,
+              color: modelReady ? Colors.green : Colors.orange,
+            ),
+          ),
+          // ปุ่มป้องกัน
+          IconButton(
+            icon: Icon(
+              protectionEnabled ? Icons.shield : Icons.shield_outlined,
+              color: protectionEnabled ? Colors.green : Colors.grey,
+            ),
+            onPressed: _toggleProtection,
+            tooltip: protectionEnabled ? 'ป้องกันเปิดอยู่' : 'ป้องกันปิดอยู่',
+          ),
+          // ปุ่มรีเฟรช
+          RotationTransition(
+            turns: _refreshController,
+            child: IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: isLoading ? null : _loadModelAndData,
+            ),
+          ),
+        ],
+      ),
+      body: isLoading
+          ? _buildLoadingScreen()
+          : RefreshIndicator(
+              onRefresh: _loadModelAndData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildGreeting(),
+                    const SizedBox(height: 16),
+                    _buildModelStatus(),
+                    const SizedBox(height: 16),
+                    _buildProtectionStatus(),
+                    const SizedBox(height: 24),
+                    _buildSecurityScore(securityScore),
+                    const SizedBox(height: 24),
+                    _buildStatsCards(),
+                    const SizedBox(height: 24),
+                    _buildRecentScansList(),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+  
+  Widget _buildLoadingScreen() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 16),
+          Text(
+            modelReady 
+                ? 'กำลังประมวลผลข้อความ...'
+                : 'กำลังโหลดโมเดล AI...',
+            style: GoogleFonts.kanit(fontSize: 16),
+          ),
+          if (messagesCheckedToday > 0)
+            Text(
+              'ประมวลผลแล้ว $messagesCheckedToday ข้อความ',
+              style: GoogleFonts.kanit(fontSize: 14, color: Colors.grey),
+            ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildGreeting() {
+    final hour = DateTime.now().hour;
+    final greeting = hour < 12 
+        ? 'สวัสดีตอนเช้า' 
+        : hour < 17 
+            ? 'สวัสดีตอนบ่าย' 
+            : 'สวัสดีตอนเย็น';
+    
+    return Text(
+      '👋 $greeting!',
+      style: GoogleFonts.kanit(
+        fontSize: 20,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+  
+  Widget _buildModelStatus() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 500),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: modelReady ? Colors.green.shade100 : Colors.orange.shade100,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: modelReady ? Colors.green : Colors.orange,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            modelReady ? Icons.check_circle : Icons.hourglass_empty,
+            color: modelReady ? Colors.green : Colors.orange,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            modelReady 
+                ? '✅ โมเดル AI พร้อมใช้งาน'
+                : '⏳ กำลังโหลดโมเดล AI...',
+            style: GoogleFonts.kanit(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: modelReady 
+                  ? Colors.green.shade800 
+                  : Colors.orange.shade800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildProtectionStatus() {
+    String statusText;
+    Color statusColor;
+    IconData statusIcon;
+
+    if (!modelReady) {
+      statusText = '⏳ โมเดล AI กำลังโหลด กรุณารอสักครู่';
+      statusColor = Colors.orange;
+      statusIcon = Icons.hourglass_empty;
+    } else if (!protectionEnabled) {
+      statusText = '❌ ระบบป้องกันปิดอยู่ กรุณาเปิดเพื่อความปลอดภัย';
+      statusColor = Colors.red;
+      statusIcon = Icons.shield_outlined;
+    } else if (scamDetectedToday > 0) {
+      statusText = '⚠️ ตรวจพบข้อความต้องสงสัย $scamDetectedToday รายการ';
+      statusColor = Colors.orange;
+      statusIcon = Icons.warning;
+    } else {
+      statusText = '✅ ระบบป้องกันกำลังทำงาน และไม่พบภัยอันตรายวันนี้';
+      statusColor = Colors.green;
+      statusIcon = Icons.check_circle;
+    }
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 500),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: statusColor.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: statusColor),
+      ),
+      child: Row(
+        children: [
+          Icon(statusIcon, color: statusColor, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              statusText,
+              style: GoogleFonts.kanit(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: statusColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildSecurityScore(double score) {
+    final scoreColor = score > 80 
+        ? Colors.green 
+        : score > 50 
+            ? Colors.orange 
+            : Colors.red;
+
+    return FadeTransition(
+      opacity: _statsController,
+      child: Card(
+        elevation: 6,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(
+              colors: [
+                scoreColor.withOpacity(0.1),
+                Colors.white,
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(Icons.security, size: 48, color: scoreColor),
+              const SizedBox(height: 12),
+              Text(
+                'คะแนนความปลอดภัยวันนี้',
+                style: GoogleFonts.kanit(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${score.toStringAsFixed(0)}%',
+                style: GoogleFonts.kanit(
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                  color: scoreColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildStatsCards() {
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: const Offset(0, 0.3),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(
+        parent: _statsController,
+        curve: Curves.easeOutCubic,
+      )),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildStatCard(
+              'ตรวจทั้งหมด',
+              messagesCheckedToday.toString(),
+              Icons.message,
+              Colors.blue,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildStatCard(
+              'ต้องสงสัย',
+              scamDetectedToday.toString(),
+              Icons.warning,
+              Colors.red,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildStatCard(
+              'ปลอดภัย',
+              safeMessagesToday.toString(),
+              Icons.check_circle,
+              Colors.green,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: GoogleFonts.kanit(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: GoogleFonts.kanit(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildRecentScansList() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'ตรวจสอบล่าสุด',
+              style: GoogleFonts.kanit(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (scanResults.isNotEmpty)
+              Text(
+                '${scanResults.length} รายการ',
+                style: GoogleFonts.kanit(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (scanResults.isEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.inbox_outlined,
+                    size: 48,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'ยังไม่มีการตรวจสอบ',
+                    style: GoogleFonts.kanit(
+                      fontSize: 16,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          ListView.separated(
+            physics: const NeverScrollableScrollPhysics(),
+            shrinkWrap: true,
+            itemCount: scanResults.take(20).length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final result = scanResults[index];
+              return Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.all(12),
+                  leading: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: result.isScam 
+                          ? Colors.red.withOpacity(0.1)
+                          : Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          result.isScam ? Icons.warning : Icons.check_circle,
+                          color: result.isScam ? Colors.red : Colors.green,
+                          size: 20,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          result.score.toStringAsFixed(2),
+                          style: GoogleFonts.kanit(
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            color: result.isScam ? Colors.red : Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  title: Text(
+                    result.sender,
+                    style: GoogleFonts.kanit(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 4),
+                      Text(
+                        result.message,
+                        style: GoogleFonts.kanit(fontSize: 13),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Text(
+                            _formatDateTime(result.dateTime),
+                            style: GoogleFonts.kanit(
+                              fontSize: 11,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: result.isScam 
+                                  ? Colors.red.withOpacity(0.1)
+                                  : Colors.green.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              result.isScam ? 'ต้องสงสัย' : 'ปลอดภัย',
+                              style: GoogleFonts.kanit(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: result.isScam ? Colors.red : Colors.green,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  onTap: () => _showMessageDetail(result),
+                ),
+              );
+            },
+          ),
       ],
     );
   }

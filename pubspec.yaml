@@ -10,32 +10,40 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+
   supabase_flutter: ^2.0.0
+
   # Anti-Scam Core Packages
   telephony: ^0.2.0
   awesome_notifications: ^0.10.1
   shared_preferences: ^2.1.1
   google_fonts: ^6.2.1
   permission_handler: ^11.0.1
-  url_launcher: ^6.1.7  # เพิ่ม url_launcher สำหรับเปิดลิงก์
+  url_launcher: ^6.1.7
   firebase_core: ^2.10.0
   firebase_auth: ^4.4.0
   cloud_firestore: ^4.5.0
   google_sign_in: ^6.0.0
-  lucide_icons: ^0.257.0  # ✅ เวอร์ชันที่มีจริง
+  lucide_icons: ^0.257.0
+  pie_chart: ^5.0.3
   # Local Database
   sqflite: ^2.2.8+4
   path: ^1.8.3
+
+  # Network and UI
   http: ^1.4.0
   flutter_svg: ^2.0.7
   intl: ^0.20.2
   backendless_sdk: ^7.3.1
 
+  # TensorFlow Lite packages (removed helper due to compatibility issues)
+  tflite_flutter: ^0.9.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  dart_code_metrics: ^5.7.0
-  flutter_launcher_icons: ^0.13.1
+  test: ^1.20.1
+  flutter_launcher_icons: ^0.14.4
 
 dependency_overrides:
   http: ^1.0.0
@@ -45,8 +53,8 @@ flutter:
   assets:
     - assets/images/app_icon.jpg
     - assets/google_icon.png
-    - assets/sms_model.tflite
-    - assets/tokenizer.json
+    - assets/models/sms_spam_model.tflite
+
 flutter_icons:
   android: true
   ios: true

@@ -4,7 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   awesome_notifications
-  gtk
+  tflite_flutter
   url_launcher_linux
 )
 
