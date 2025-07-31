@@ -26,6 +26,7 @@ dependencies:
   google_sign_in: ^6.0.0
   lucide_icons: ^0.257.0
   pie_chart: ^5.0.3
+
   # Local Database
   sqflite: ^2.2.8+4
   path: ^1.8.3
@@ -36,14 +37,14 @@ dependencies:
   intl: ^0.20.2
   backendless_sdk: ^7.3.1
 
-  # TensorFlow Lite packages (removed helper due to compatibility issues)
-  tflite_flutter: ^0.9.0
+  # TensorFlow Lite packages (ลบ helper ออกเพื่อหลีกเลี่ยง conflict)
+  tflite_flutter: ^0.10.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   test: ^1.20.1
-  flutter_launcher_icons: ^0.14.4
+  flutter_launcher_icons: ^0.11.0
 
 dependency_overrides:
   http: ^1.0.0
@@ -54,6 +55,7 @@ flutter:
     - assets/images/app_icon.jpg
     - assets/google_icon.png
     - assets/models/sms_spam_model.tflite
+    - assets/models/tokenizer.json
 
 flutter_icons:
   android: true

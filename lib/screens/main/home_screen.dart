@@ -133,7 +133,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   
   Future<void> _loadAndAnalyzeSMS() async {
     try {
-      bool permissionGranted = await telephony.requestPhoneAndSmsPermissions;
+      bool permissionGranted = await telephony.requestPhoneAndSmsPermissions ?? false;
+
       if (!permissionGranted) {
         _showError('ไม่ได้รับสิทธิ์เข้าถึง SMS');
         return;
@@ -141,8 +142,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       
       final messages = await telephony.getInboxSms(
         columns: [SmsColumn.ADDRESS, SmsColumn.BODY, SmsColumn.DATE],
-        sortOrder: [OrderBy(SmsColumn.DATE, sort: Sort.DESC)],
-        limit: 100,
       );
       
       List<ScanResult> results = [];
@@ -163,16 +162,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           result = _scanCache[text]!;
         } else {
           // วิเคราะห์ข้อความด้วย AI
-          final analysisResult = await SMSModelService.instance.analyze(text);
+          final isScam = await SMSModelService.instance.analyze(text);
+          final detailedResult = await SMSModelService.instance.analyzeDetailed(text);
           
+          // สร้าง ScanResult object
           result = ScanResult(
-            id: msg.id.toString(),
+            id: '${msg.id ?? DateTime.now().millisecondsSinceEpoch}',
             sender: sender,
             message: text,
-            isScam: analysisResult.isScam,
             dateTime: date,
-            score: analysisResult.score,
-            reason: 'โมเดล AI วิเคราะห์ (คะแนน: ${analysisResult.score.toStringAsFixed(3)})',
+            isScam: isScam,
+            score: detailedResult['confidence']?.toDouble() ?? 0.0,
+            reason: 'วิเคราะห์ด้วย ${detailedResult['method']} (คะแนน: ${(detailedResult['confidence'] ?? 0.0).toStringAsFixed(3)})',
           );
           
           // เพิ่มเข้า cache
@@ -459,7 +460,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           const SizedBox(width: 8),
           Text(
             modelReady 
-                ? '✅ โมเดル AI พร้อมใช้งาน'
+                ? '✅ โมเดล AI พร้อมใช้งาน'
                 : '⏳ กำลังโหลดโมเดล AI...',
             style: GoogleFonts.kanit(
               fontSize: 14,

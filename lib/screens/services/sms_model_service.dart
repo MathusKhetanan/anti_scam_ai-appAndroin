@@ -7,14 +7,14 @@ class SMSModelService {
   SMSModelService._privateConstructor();
   static final SMSModelService instance = SMSModelService._privateConstructor();
 
-  late Interpreter _interpreter;
-  late Tokenizer _tokenizer;
+  Interpreter? _interpreter;
+  Tokenizer? _tokenizer;
 
-  // แก้ไข path ให้ถูกต้อง
   static const String modelFile = 'assets/models/sms_spam_model.tflite';
   static const String tokenizerFile = 'assets/models/tokenizer.json';
 
   bool _isReady = false;
+  bool get isReady => _isReady;
 
   /// Static init method for main.dart
   static Future<void> init() async {
@@ -42,7 +42,7 @@ class SMSModelService {
       print('✅ Loaded TFLite model');
     } catch (e) {
       print('❌ Failed to load model: $e');
-      rethrow;
+      // Don't rethrow - graceful fallback
     }
   }
 
@@ -54,37 +54,35 @@ class SMSModelService {
       print('✅ Loaded tokenizer');
     } catch (e) {
       print('❌ Failed to load tokenizer: $e');
-      rethrow;
+      // Don't rethrow - graceful fallback
     }
   }
 
   /// วิเคราะห์ข้อความ SMS ว่าเป็นมิจฉาชีพหรือไม่
-  /// คืนค่า true = spam / false = not spam
   Future<bool> analyze(String text) async {
-    if (!_isReady) {
+    if (!_isReady || _interpreter == null || _tokenizer == null) {
       print('⚠️ Model not ready, using fallback detection');
       return _fallbackSpamDetection(text);
     }
 
     try {
       // แปลงข้อความเป็น tokens ตาม tokenizer ที่โหลดมา
-      List<int> inputIds = _tokenizer.tokenize(text);
+      List<int> inputIds = _tokenizer!.tokenize(text);
 
-      // แปลงเป็น tensor input shape ตามโมเดล (เช่น [1, sequenceLength])
+      // แปลงเป็น tensor input shape ตามโมเดล
       var input = List.filled(100, 0);
       for (int i = 0; i < inputIds.length && i < 100; i++) {
         input[i] = inputIds[i];
       }
 
-      // Fixed output tensor creation
+      // Create output tensor
       var output = List.generate(1, (index) => List.filled(1, 0.0));
 
-      _interpreter.run([input], output);
+      _interpreter!.run([input], output);
 
       double score = output[0][0];
       print('🧠 AI score: $score');
 
-      // สมมุติ threshold 0.5
       return score > 0.5;
     } catch (e) {
       print('❌ ML analysis failed: $e, using fallback');
@@ -115,7 +113,7 @@ class SMSModelService {
     return isSpam;
   }
 
-  /// Additional methods for testing compatibility
+  /// Additional methods for compatibility
   Future<bool> classifyMessage(String message) async {
     return await analyze(message);
   }
@@ -136,24 +134,30 @@ class SMSModelService {
 
   /// ปิดทรัพยากร
   void dispose() {
-    if (_isReady) {
-      _interpreter.close();
-      _isReady = false;
-    }
+    _interpreter?.close();
+    _interpreter = null;
+    _tokenizer = null;
+    _isReady = false;
   }
 }
 
-/// ตัวช่วยแปลงข้อความเป็น token (คร่าว ๆ)
+/// ตัวช่วยแปลงข้อความเป็น token
 class Tokenizer {
   final Map<String, int> _wordIndex;
 
   Tokenizer(this._wordIndex);
 
   factory Tokenizer.fromJson(String jsonString) {
-    final Map<String, dynamic> map = Map<String, dynamic>.from(
-      json.decode(jsonString) as Map,
-    );
-    return Tokenizer(map.map((key, value) => MapEntry(key, value as int)));
+    try {
+      final Map<String, dynamic> map = Map<String, dynamic>.from(
+        json.decode(jsonString) as Map,
+      );
+      return Tokenizer(map.map((key, value) => MapEntry(key, value as int)));
+    } catch (e) {
+      print('❌ Failed to parse tokenizer JSON: $e');
+      // Return empty tokenizer as fallback
+      return Tokenizer({});
+    }
   }
 
   List<int> tokenize(String text) {

@@ -154,7 +154,7 @@ class _MyAppState extends State<MyApp> {
             '/main': (context) => MainScreen(themeModeNotifier: themeModeNotifier),
             '/home': (context) => const HomeScreen(),
             '/scan': (context) => const ScanScreen(),
-            '/stats': (context) => const StatsScreen(),
+'/stats': (context) => const StatsScreen(scanResults: []), // เพิ่ม scanResults: []
             '/profile': (context) => const UserScreen(),
             '/login': (context) => const LoginScreen(),
             '/settings': (context) => SettingsScreen(themeModeNotifier: themeModeNotifier),

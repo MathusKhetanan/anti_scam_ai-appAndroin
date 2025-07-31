@@ -5,11 +5,12 @@ import 'stats_screen.dart';
 import 'settings_screen.dart';
 import 'user_screen.dart';
 import 'bottom_nav_bar.dart';
+import '../models/scan_result.dart'; // เพิ่ม import
 
 class MainScreen extends StatefulWidget {
-  final ValueNotifier<ThemeMode> themeModeNotifier;  // เพิ่มรับตัวนี้
+  final ValueNotifier<ThemeMode> themeModeNotifier;
 
-  const MainScreen({super.key, required this.themeModeNotifier});  // แก้ constructor
+  const MainScreen({super.key, required this.themeModeNotifier});
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -17,18 +18,21 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
+  
+  // เพิ่ม list สำหรับเก็บ scan results
+  List<ScanResult> _scanResults = [];
 
   late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
-    // สร้าง list ของหน้าจอ พร้อมส่ง themeModeNotifier ไปให้ SettingsScreen
+    // สร้าง list ของหน้าจอ พร้อมส่งพารามิเตอร์ที่จำเป็น
     _screens = [
       const HomeScreen(),
       const ScanScreen(),
-      const StatsScreen(),
-      SettingsScreen(themeModeNotifier: widget.themeModeNotifier),  // ส่งพารามิเตอร์
+      StatsScreen(scanResults: _scanResults), // เพิ่ม scanResults parameter
+      SettingsScreen(themeModeNotifier: widget.themeModeNotifier),
       const UserScreen(),
     ];
   }
@@ -36,6 +40,15 @@ class _MainScreenState extends State<MainScreen> {
   void _onTabSelected(int index) {
     setState(() {
       _currentIndex = index;
+    });
+  }
+
+  // เพิ่ม method สำหรับอัพเดท scan results
+  void _updateScanResults(List<ScanResult> newResults) {
+    setState(() {
+      _scanResults = newResults;
+      // อัพเดท StatsScreen ด้วย
+      _screens[2] = StatsScreen(scanResults: _scanResults);
     });
   }
 
