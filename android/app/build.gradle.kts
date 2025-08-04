@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.anti_scam_ai"  // กำหนด namespace ที่นี่
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36  // ✅ กำหนดตรง ๆ ไปเลย
     ndkVersion = "27.0.12077973"
 
     compileOptions {
