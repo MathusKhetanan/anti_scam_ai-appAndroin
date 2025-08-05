@@ -3,7 +3,7 @@ description: A lightweight anti-scam SMS detection app.
 version: 1.0.0+1
 
 environment:
-  sdk: ">=2.17.0 <3.4.0"
+  sdk: ">=2.17.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -11,10 +11,9 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  supabase_flutter: ^2.0.0
-
   # Anti-Scam Core Packages
-  telephony: ^0.2.0
+  telephony:
+    path: packages/Telephony
   awesome_notifications: ^0.10.1
   shared_preferences: ^2.1.1
   google_fonts: ^6.2.1
@@ -35,10 +34,11 @@ dependencies:
   http: ^1.4.0
   flutter_svg: ^2.0.7
   intl: ^0.20.2
-  backendless_sdk: ^7.3.1
-
-  # TensorFlow Lite packages (ลบ helper ออกเพื่อหลีกเลี่ยง conflict)
-  tflite_flutter: ^0.10.0
+  
+backendless_sdk:
+  git:
+    url: https://github.com/Backendless/Flutter-SDK.git
+    ref: master
 
 dev_dependencies:
   flutter_test:

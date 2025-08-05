@@ -18,6 +18,7 @@
         tools:ignore="ProtectedPermissions" />
 
     <application
+        android:name=".MyApplication"
         android:label="anti_scam_ai"
         android:icon="@mipmap/ic_launcher"
         android:enableOnBackInvokedCallback="true"

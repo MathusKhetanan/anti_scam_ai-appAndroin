@@ -1,8 +1,73 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:anti_scam_ai/services/gemini_api.dart';
+import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+
+// ✅ API Service Class (ย้ายมาจาก main.dart)
+class ApiService {
+  static const String baseUrl = 'https://backend-api-j5m6.onrender.com/';
+  static const String predictEndpoint = '/predict';
+  
+  // ตรวจสอบข้อความผ่าน API
+  static Future<Map<String, dynamic>> checkMessage(String message) async {
+    final url = Uri.parse('$baseUrl$predictEndpoint');
+    
+    try {
+      debugPrint('🌐 Calling API: $url');
+      debugPrint('📤 Message: $message');
+      
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({'message': message}),
+      ).timeout(const Duration(seconds: 30));
+
+      debugPrint('📥 Response status: ${response.statusCode}');
+      debugPrint('📥 Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': true,
+          'prediction': data['prediction'],
+          'isScam': data['prediction'] == 'scam',
+          'confidence': data['confidence'] ?? 0.0,
+          'reason': data['reason'] ?? 'ระบบตรวจสอบแล้ว',
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'API returned status ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      debugPrint('❌ API Error: $e');
+      return {
+        'success': false,
+        'error': 'Network error: $e',
+      };
+    }
+  }
+  
+  // ทดสอบการเชื่อมต่อ API
+  static Future<bool> testConnection() async {
+    try {
+      final response = await http.get(
+        Uri.parse(baseUrl),
+        headers: {'Accept': 'text/html'},
+      ).timeout(const Duration(seconds: 10));
+      
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('❌ Connection test failed: $e');
+      return false;
+    }
+  }
+}
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({Key? key}) : super(key: key);
@@ -22,7 +87,9 @@ class _ScanScreenState extends State<ScanScreen> with AutomaticKeepAliveClientMi
   bool _isScam = false;
   String _resultText = '';
   String _reason = '';
+  double _confidence = 0.0;
   String? _currentRequestId; // ป้องกันการกดซ้ำ
+  bool _apiConnected = true; // สถานะการเชื่อมต่อ API
 
   @override
   bool get wantKeepAlive => true; // คง state ไว้เมื่อสลับหน้า
@@ -33,12 +100,36 @@ class _ScanScreenState extends State<ScanScreen> with AutomaticKeepAliveClientMi
     _textController.addListener(() {
       setState(() {}); // อัปเดตปุ่มตรวจสอบ enable/disable ตามข้อความ
     });
+    _checkApiConnection(); // ตรวจสอบการเชื่อมต่อ API เมื่อเริ่มต้น
   }
 
   @override
   void dispose() {
     _textController.dispose();
     super.dispose();
+  }
+
+  // ตรวจสอบการเชื่อมต่อ API
+  Future<void> _checkApiConnection() async {
+    final connected = await ApiService.testConnection();
+    if (mounted) {
+      setState(() {
+        _apiConnected = connected;
+      });
+      
+      if (!connected) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('⚠️ ไม่สามารถเชื่อมต่อ API ได้', style: GoogleFonts.kanit()),
+            backgroundColor: Colors.orange,
+            action: SnackBarAction(
+              label: 'ลองใหม่',
+              onPressed: _checkApiConnection,
+            ),
+          ),
+        );
+      }
+    }
   }
 
   // สร้าง hash key สำหรับ cache
@@ -78,6 +169,21 @@ class _ScanScreenState extends State<ScanScreen> with AutomaticKeepAliveClientMi
     final input = _textController.text.trim();
     if (input.isEmpty || _loading) return;
 
+    // ตรวจสอบการเชื่อมต่อ API ก่อน
+    if (!_apiConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ ไม่สามารถเชื่อมต่อ API ได้', style: GoogleFonts.kanit()),
+          backgroundColor: Colors.red,
+          action: SnackBarAction(
+            label: 'ตรวจสอบการเชื่อมต่อ',
+            onPressed: _checkApiConnection,
+          ),
+        ),
+      );
+      return;
+    }
+
     // สร้าง request ID เพื่อป้องกันการกดซ้ำ
     final requestId = DateTime.now().millisecondsSinceEpoch.toString();
     _currentRequestId = requestId;
@@ -98,11 +204,22 @@ class _ScanScreenState extends State<ScanScreen> with AutomaticKeepAliveClientMi
         // จำลอง delay เล็กน้อยเพื่อ UX ที่ดี
         await Future.delayed(const Duration(milliseconds: 300));
       } else {
-        print('🔍 เรียก Gemini API');
-        analysis = await GeminiApi.analyzeMessageWithReason(input);
+        print('🔍 เรียก API Service');
+        final result = await ApiService.checkMessage(input);
         
-        // บันทึกลง cache
-        _saveToCacheIfValid(input, analysis);
+        if (result['success'] == true) {
+          analysis = {
+            'isScam': result['isScam'] as bool? ?? false,
+            'reason': result['reason'] as String? ?? 'ระบบตรวจสอบแล้ว',
+            'confidence': result['confidence'] as double? ?? 0.0,
+            'prediction': result['prediction'] as String? ?? 'unknown',
+          };
+          
+          // บันทึกลง cache
+          _saveToCacheIfValid(input, analysis);
+        } else {
+          throw Exception(result['error'] ?? 'Unknown API error');
+        }
       }
 
       // ตรวจสอบว่า request นี้ยังเป็น request ล่าสุดหรือไม่
@@ -114,7 +231,10 @@ class _ScanScreenState extends State<ScanScreen> with AutomaticKeepAliveClientMi
       setState(() {
         _isScam = analysis['isScam'] as bool? ?? false;
         _reason = analysis['reason'] as String? ?? '';
-        _resultText = _isScam ? 'ข้อความนี้มีความเสี่ยงเป็นสแปมหรือหลอกลวง' : 'ข้อความนี้ปลอดภัย';
+        _confidence = analysis['confidence'] as double? ?? 0.0;
+        _resultText = _isScam 
+            ? 'ข้อความนี้มีความเสี่ยงเป็นสแปมหรือหลอกลวง' 
+            : 'ข้อความนี้ปลอดภัย';
         _hasResult = true;
       });
 
@@ -126,7 +246,9 @@ class _ScanScreenState extends State<ScanScreen> with AutomaticKeepAliveClientMi
         _resultText = 'เกิดข้อผิดพลาดในการวิเคราะห์: $e';
         _isScam = false;
         _reason = '';
+        _confidence = 0.0;
         _hasResult = true;
+        _apiConnected = false; // อัปเดตสถานะการเชื่อมต่อ
       });
       
       if (mounted) {
@@ -135,6 +257,10 @@ class _ScanScreenState extends State<ScanScreen> with AutomaticKeepAliveClientMi
             content: Text('ไม่สามารถวิเคราะห์ข้อความได้ กรุณาลองใหม่', 
                          style: GoogleFonts.kanit()),
             backgroundColor: Colors.red.shade600,
+            action: SnackBarAction(
+              label: 'ตรวจสอบการเชื่อมต่อ',
+              onPressed: _checkApiConnection,
+            ),
           ),
         );
       }
@@ -154,6 +280,7 @@ class _ScanScreenState extends State<ScanScreen> with AutomaticKeepAliveClientMi
       _resultText = '';
       _reason = '';
       _isScam = false;
+      _confidence = 0.0;
     });
   }
 
@@ -168,6 +295,12 @@ class _ScanScreenState extends State<ScanScreen> with AutomaticKeepAliveClientMi
         ),
       );
     }
+  }
+
+  // ตัวอย่างข้อความสำหรับทดสอบ
+  void _insertExampleText(String text) {
+    _textController.text = text;
+    setState(() {});
   }
 
   @override
@@ -203,6 +336,15 @@ class _ScanScreenState extends State<ScanScreen> with AutomaticKeepAliveClientMi
       appBar: AppBar(
         title: Text('ตรวจสอบข้อความ', style: GoogleFonts.kanit()),
         actions: [
+          // แสดงสถานะการเชื่อมต่อ API
+          IconButton(
+            icon: Icon(
+              _apiConnected ? Icons.cloud_done : Icons.cloud_off,
+              color: _apiConnected ? Colors.green : Colors.red,
+            ),
+            onPressed: _checkApiConnection,
+            tooltip: _apiConnected ? 'API เชื่อมต่อแล้ว' : 'API ไม่เชื่อมต่อ',
+          ),
           // ปุ่ม debug สำหรับดู cache info
           if (_analysisCache.isNotEmpty)
             IconButton(
@@ -248,9 +390,15 @@ class _ScanScreenState extends State<ScanScreen> with AutomaticKeepAliveClientMi
                             ),
                           ],
                         ),
-                  helperText: isCurrentCached ? '💾 ข้อความนี้เคยวิเคราะห์แล้ว (ใช้ cache)' : null,
+                  helperText: isCurrentCached 
+                      ? '💾 ข้อความนี้เคยวิเคราะห์แล้ว (ใช้ cache)' 
+                      : !_apiConnected 
+                          ? '⚠️ API ไม่เชื่อมต่อ' 
+                          : null,
                   helperStyle: GoogleFonts.kanit(
-                    color: theme.colorScheme.primary,
+                    color: !_apiConnected 
+                        ? Colors.orange 
+                        : theme.colorScheme.primary,
                     fontSize: 12,
                   ),
                 ),
@@ -287,12 +435,36 @@ class _ScanScreenState extends State<ScanScreen> with AutomaticKeepAliveClientMi
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    backgroundColor: !_apiConnected ? Colors.grey : null,
                   ),
-                  onPressed: (_loading || _textController.text.trim().isEmpty) 
+                  onPressed: (_loading || _textController.text.trim().isEmpty || !_apiConnected) 
                       ? null 
                       : _analyzeText,
                 ),
               ),
+              
+              // ตัวอย่างข้อความสำหรับทดสอบ
+              const SizedBox(height: 16),
+              Text(
+                'ตัวอย่างข้อความสำหรับทดสอบ:',
+                style: GoogleFonts.kanit(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white70 : Colors.black54,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  _buildExampleChip('คุณได้รับรางวัล 1 ล้านบาท! กดลิงก์เพื่อรับทันที', true),
+                  _buildExampleChip('ยืนยันบัญชีธนาคารของคุณ คลิกที่นี่', true),
+                  _buildExampleChip('สวัสดี ทำงานอะไรอยู่', false),
+                  _buildExampleChip('ขอบคุณสำหรับสินค้า ได้รับแล้ว', false),
+                ],
+              ),
+              
               const SizedBox(height: 24),
               if (_hasResult)
                 Card(
@@ -324,6 +496,22 @@ class _ScanScreenState extends State<ScanScreen> with AutomaticKeepAliveClientMi
                             ),
                           ],
                         ),
+                        if (_confidence > 0) ...[
+                          const SizedBox(height: 8),
+                          LinearProgressIndicator(
+                            value: _confidence,
+                            backgroundColor: Colors.grey.withOpacity(0.3),
+                            color: _isScam ? Colors.red : Colors.green,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'ความมั่นใจ: ${(_confidence * 100).toStringAsFixed(1)}%',
+                            style: GoogleFonts.kanit(
+                              fontSize: 12,
+                              color: isDark ? Colors.white60 : Colors.black54,
+                            ),
+                          ),
+                        ],
                         if (_reason.isNotEmpty) ...[
                           const SizedBox(height: 12),
                           Text(
@@ -364,6 +552,24 @@ class _ScanScreenState extends State<ScanScreen> with AutomaticKeepAliveClientMi
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // สร้าง chip สำหรับตัวอย่างข้อความ
+  Widget _buildExampleChip(String text, bool isScamExample) {
+    return ActionChip(
+      label: Text(
+        text.length > 30 ? '${text.substring(0, 30)}...' : text,
+        style: GoogleFonts.kanit(fontSize: 12),
+      ),
+      onPressed: () => _insertExampleText(text),
+      backgroundColor: isScamExample 
+          ? Colors.red.withOpacity(0.1)
+          : Colors.green.withOpacity(0.1),
+      side: BorderSide(
+        color: isScamExample ? Colors.red : Colors.green,
+        width: 1,
       ),
     );
   }

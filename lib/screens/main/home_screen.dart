@@ -4,7 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/scan_result.dart';
-import '../services/sms_model_service.dart';
+// ✅ เปลี่ยนจาก sms_model_service เป็น ApiService
+import '../../main.dart'; // import ApiService
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -72,7 +73,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           id: data['id'] ?? '',
           sender: data['sender'] ?? '',
           message: data['message'] ?? '',
+          prediction: data['prediction'] ?? 'safe',
           isScam: data['isScam'] ?? false,
+          timestamp: DateTime.parse(data['timestamp'] ?? DateTime.now().toIso8601String()),
           dateTime: DateTime.parse(data['dateTime'] ?? DateTime.now().toIso8601String()),
           score: (data['score'] ?? 0.0).toDouble(),
           reason: data['reason'] ?? '',
@@ -90,7 +93,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         'id': value.id,
         'sender': value.sender,
         'message': value.message,
+        'prediction': value.prediction,
         'isScam': value.isScam,
+        'timestamp': value.timestamp.toIso8601String(),
         'dateTime': value.dateTime.toIso8601String(),
         'score': value.score,
         'reason': value.reason,
@@ -113,16 +118,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _refreshController.repeat();
     
     try {
-      // โหลดโมเดล AI
-      await SMSModelService.instance.loadModel();
-      setState(() => modelReady = true);
+      // ✅ ทดสอบการเชื่อมต่อ API แทนการโหลดโมเดล
+      final connected = await ApiService.testConnection();
+      setState(() => modelReady = connected);
       
-      // โหลดและวิเคราะห์ข้อความ
-      await _loadAndAnalyzeSMS();
-      
-      _statsController.forward();
+      if (connected) {
+        // โหลดและวิเคราะห์ข้อความ
+        await _loadAndAnalyzeSMS();
+        _statsController.forward();
+      } else {
+        _showError('ไม่สามารถเชื่อมต่อ API ได้');
+      }
     } catch (e) {
-      _showError('เกิดข้อผิดพลาดในการโหลดโมเดล: $e');
+      _showError('เกิดข้อผิดพลาดในการโหลดข้อมูล: $e');
     } finally {
       _refreshController.stop();
       if (mounted) {
@@ -161,20 +169,36 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         if (_scanCache.containsKey(text)) {
           result = _scanCache[text]!;
         } else {
-          // วิเคราะห์ข้อความด้วย AI
-          final isScam = await SMSModelService.instance.analyze(text);
-          final detailedResult = await SMSModelService.instance.analyzeDetailed(text);
+          // ✅ วิเคราะห์ข้อความด้วย API Service
+          final apiResult = await ApiService.checkMessage(text);
           
           // สร้าง ScanResult object
-          result = ScanResult(
-            id: '${msg.id ?? DateTime.now().millisecondsSinceEpoch}',
-            sender: sender,
-            message: text,
-            dateTime: date,
-            isScam: isScam,
-            score: detailedResult['confidence']?.toDouble() ?? 0.0,
-            reason: 'วิเคราะห์ด้วย ${detailedResult['method']} (คะแนน: ${(detailedResult['confidence'] ?? 0.0).toStringAsFixed(3)})',
-          );
+          if (apiResult['success'] == true) {
+            result = ScanResult(
+              id: '${msg.id ?? DateTime.now().millisecondsSinceEpoch}',
+              sender: sender,
+              message: text,
+              prediction: apiResult['prediction'] ?? 'safe',
+              timestamp: date,
+              dateTime: date,
+              isScam: apiResult['isScam'] ?? false,
+              score: apiResult['isScam'] == true ? 0.8 : 0.2, // ประมาณการคะแนน
+              reason: 'วิเคราะห์ด้วย AI API - ${apiResult['prediction']}',
+            );
+          } else {
+            // ถ้า API ไม่สำเร็จ ให้ถือว่าปลอดภัย
+            result = ScanResult(
+              id: '${msg.id ?? DateTime.now().millisecondsSinceEpoch}',
+              sender: sender,
+              message: text,
+              prediction: 'safe',
+              timestamp: date,
+              dateTime: date,
+              isScam: false,
+              score: 0.0,
+              reason: 'ไม่สามารถวิเคราะห์ได้ - ${apiResult['error']}',
+            );
+          }
           
           // เพิ่มเข้า cache
           _scanCache[text] = result;
@@ -348,7 +372,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           Container(
             margin: const EdgeInsets.only(right: 8),
             child: Icon(
-              modelReady ? Icons.smart_toy : Icons.hourglass_empty,
+              modelReady ? Icons.cloud_done : Icons.cloud_off,
               color: modelReady ? Colors.green : Colors.orange,
             ),
           ),
@@ -409,7 +433,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           Text(
             modelReady 
                 ? 'กำลังประมวลผลข้อความ...'
-                : 'กำลังโหลดโมเดล AI...',
+                : 'กำลังทดสอบการเชื่อมต่อ API...',
             style: GoogleFonts.kanit(fontSize: 16),
           ),
           if (messagesCheckedToday > 0)
@@ -453,15 +477,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: Row(
         children: [
           Icon(
-            modelReady ? Icons.check_circle : Icons.hourglass_empty,
+            modelReady ? Icons.cloud_done : Icons.cloud_off,
             color: modelReady ? Colors.green : Colors.orange,
             size: 20,
           ),
           const SizedBox(width: 8),
           Text(
             modelReady 
-                ? '✅ โมเดล AI พร้อมใช้งาน'
-                : '⏳ กำลังโหลดโมเดล AI...',
+                ? '✅ API พร้อมใช้งาน'
+                : '⏳ กำลังเชื่อมต่อ API...',
             style: GoogleFonts.kanit(
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -481,9 +505,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     IconData statusIcon;
 
     if (!modelReady) {
-      statusText = '⏳ โมเดล AI กำลังโหลด กรุณารอสักครู่';
+      statusText = '⏳ API กำลังเชื่อมต่อ กรุณารอสักครู่';
       statusColor = Colors.orange;
-      statusIcon = Icons.hourglass_empty;
+      statusIcon = Icons.cloud_off;
     } else if (!protectionEnabled) {
       statusText = '❌ ระบบป้องกันปิดอยู่ กรุณาเปิดเพื่อความปลอดภัย';
       statusColor = Colors.red;

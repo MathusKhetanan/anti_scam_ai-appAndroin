@@ -4,16 +4,13 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'firebase_options.dart';
+import 'screens/models/scan_result.dart'; // เพิ่มบรรทัดนี้
 
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
 import 'screens/permission/permission_screen.dart';
-<<<<<<< HEAD
 import 'screens/main/sms_history_screen.dart';
-=======
-import 'screens/main/sms_history_screen.dart'; // import history
->>>>>>> dcb51031a26fa5e977b1ab5746bd5a7fb78ac375
 import 'screens/main/main_screen.dart';
 import 'screens/main/home_screen.dart';
 import 'screens/main/scan_screen.dart';
@@ -21,13 +18,10 @@ import 'screens/main/stats_screen.dart';
 import 'screens/main/user_screen.dart';
 import 'screens/main/settings_screen.dart';
 
-import 'services/sms_model_service.dart';
-
-// Global Notifiers
+// ✅ Global Notifiers
 final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.system);
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-<<<<<<< HEAD
 // ✅ Native Channel communication
 const MethodChannel methodChannel = MethodChannel('message_monitor');
 const EventChannel eventChannel = EventChannel('com.example.anti_scam_ai/accessibility');
@@ -94,29 +88,15 @@ class ApiService {
     }
   }
 }
-=======
-// Native Channels (ปรับให้ตรงกับ Android package)
-const MethodChannel methodChannel = MethodChannel('message_monitor');
-const EventChannel eventChannel = EventChannel('com.example.anti_scam_ai/accessibility');
->>>>>>> dcb51031a26fa5e977b1ab5746bd5a7fb78ac375
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-<<<<<<< HEAD
   
   // ทดสอบการเชื่อมต่อ API เมื่อเริ่มแอป
   final connected = await ApiService.testConnection();
   debugPrint('🌐 API Connection: ${connected ? "✅ Connected" : "❌ Failed"}');
   
-=======
-
-  // โหลดโมเดล AI และ tokenizer ก่อนเริ่มแอป (await เพื่อไม่ให้แอปเริ่มก่อนโหลดเสร็จ)
-  await SMSModelService.init();
-
->>>>>>> dcb51031a26fa5e977b1ab5746bd5a7fb78ac375
   runApp(const MyApp());
 }
 
@@ -131,28 +111,31 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    _requestPermissions();
-    _listenToNativeEvents();
+    requestPermissions();
+    listenToNativeEvents();
   }
-
-  /// ขอสิทธิ์ที่จำเป็นผ่าน MethodChannel
-  Future<void> _requestPermissions() async {
+List<ScanResult> someScanResults = [];
+  // ✅ แก้ไขการขอสิทธิ์ให้เรียก method ที่มีใน Android
+  Future<void> requestPermissions() async {
     try {
+      // เรียกขอสิทธิ์ SMS ก่อน
       final smsGranted = await methodChannel.invokeMethod<bool>('requestSmsPermission');
       debugPrint('📱 SMS Permission granted: $smsGranted');
-
+      
+      // เรียกขอสิทธิ์ Notification Listener
       final notifGranted = await methodChannel.invokeMethod<bool>('requestNotificationListenerPermission');
       debugPrint('🔔 Notification Permission granted: $notifGranted');
-
+      
+      // หากต้องการขอสิทธิ์ Accessibility (ถ้ามี)
       try {
         final accessibilityGranted = await methodChannel.invokeMethod<bool>('requestAccessibilityPermission');
         debugPrint('♿ Accessibility Permission granted: $accessibilityGranted');
       } catch (e) {
         debugPrint('ℹ️ Accessibility permission method not found: $e');
       }
+      
     } catch (e) {
       debugPrint('❌ Error requesting permissions: $e');
-<<<<<<< HEAD
       _showErrorDialog('เกิดข้อผิดพลาด', 'ไม่สามารถขอสิทธิ์ได้: $e');
     }
   }
@@ -187,62 +170,6 @@ class _MyAppState extends State<MyApp> {
       debugPrint('⚠️ EventChannel error: $error');
       _showErrorSnackBar('การเชื่อมต่อ Native มีปัญหา: $error');
     });
-=======
-      final context = navigatorKey.currentContext;
-      if (context != null) {
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('เกิดข้อผิดพลาด'),
-            content: Text('ไม่สามารถขอสิทธิ์ได้: $e'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('ปิด'),
-              ),
-            ],
-          ),
-        );
-      }
-    }
-  }
-
-  /// ฟัง EventChannel จาก Native เพื่อรับเหตุการณ์จาก Accessibility หรือ Notification
-  void _listenToNativeEvents() {
-    eventChannel.receiveBroadcastStream().listen(
-      (event) {
-        debugPrint('📲 Event received: $event');
-        final context = navigatorKey.currentContext;
-        if (context != null) {
-          showDialog(
-            context: context,
-            builder: (_) => AlertDialog(
-              title: const Text('ตรวจพบข้อความน่าสงสัย'),
-              content: Text(event.toString()),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('ปิด'),
-                ),
-              ],
-            ),
-          );
-        }
-      },
-      onError: (error) {
-        debugPrint('⚠️ EventChannel error: $error');
-        final context = navigatorKey.currentContext;
-        if (context != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('การเชื่อมต่อ Native มีปัญหา: $error'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-      },
-    );
->>>>>>> dcb51031a26fa5e977b1ab5746bd5a7fb78ac375
   }
 
   // แสดง Alert เมื่อพบข้อความ Scam
@@ -373,7 +300,7 @@ class _MyAppState extends State<MyApp> {
             '/main': (context) => MainScreen(themeModeNotifier: themeModeNotifier),
             '/home': (context) => const HomeScreen(),
             '/scan': (context) => const ScanScreen(),
-'/stats': (context) => const StatsScreen(scanResults: []), // เพิ่ม scanResults: []
+            '/stats': (context) => StatsScreen(scanResults: someScanResults),
             '/profile': (context) => const UserScreen(),
             '/login': (context) => const LoginScreen(),
             '/settings': (context) => SettingsScreen(themeModeNotifier: themeModeNotifier),
@@ -385,7 +312,6 @@ class _MyAppState extends State<MyApp> {
     );
   }
 }
-<<<<<<< HEAD
 
 // ✅ หน้าทดสอบ API (สำหรับ Debug)
 class ApiTestScreen extends StatefulWidget {
@@ -533,5 +459,3 @@ class _ApiTestScreenState extends State<ApiTestScreen> {
     );
   }
 }
-=======
->>>>>>> dcb51031a26fa5e977b1ab5746bd5a7fb78ac375
