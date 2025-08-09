@@ -28,7 +28,7 @@ const EventChannel eventChannel = EventChannel('com.example.anti_scam_ai/accessi
 
 // ✅ API Configuration - แก้ไข URL ตรงนี้หลัง Deploy บน Render
 class ApiService {
-  static const String baseUrl = 'https://backend-api-j5m6.onrender.com/'; // ⚠️ เปลี่ยน URL ให้ตรงกับ Render
+  static const String baseUrl = 'https://backend-api-j5m6.onrender.com'; // ⚠️ เปลี่ยน URL ให้ตรงกับ Render
   static const String predictEndpoint = '/predict';
   
   // ตรวจสอบข้อความผ่าน API

@@ -11,43 +11,48 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  # Anti-Scam Core Packages
+  google_sign_in: ^6.2.1
+  google_sign_in_android: ^6.2.1
+  google_sign_in_ios: ^5.9.0
+  google_sign_in_platform_interface: ^2.5.0
+  google_sign_in_web: ^0.12.4+4
+
+  # Anti-Scam Core
   telephony:
     path: packages/Telephony
   awesome_notifications: ^0.10.1
-  shared_preferences: ^2.1.1
-  google_fonts: ^6.2.1
-  permission_handler: ^11.0.1
-  url_launcher: ^6.1.7
-  firebase_core: ^2.10.0
-  firebase_auth: ^4.4.0
-  cloud_firestore: ^4.5.0
-  google_sign_in: ^6.0.0
+  shared_preferences: ^2.3.2
+  google_fonts: ^6.3.0
+  permission_handler: ^11.3.1
+  url_launcher: ^6.3.0
+
+  # ✅ Firebase ชุดเดียวกัน (core 2.x + auth/firestore 4.x ล่าสุดของสายนี้)
+  firebase_core: ^2.32.0
+  firebase_auth: ^4.17.5
+  cloud_firestore: ^4.17.5
+
   lucide_icons: ^0.257.0
   pie_chart: ^5.0.3
 
   # Local Database
-  sqflite: ^2.2.8+4
-  path: ^1.8.3
+  sqflite: ^2.3.3+1
+  path: ^1.9.0
 
   # Network and UI
-  http: ^1.4.0
-  flutter_svg: ^2.0.7
+  http: ^1.1.0
+  flutter_svg: ^2.0.9
   intl: ^0.20.2
-  
-backendless_sdk:
-  git:
-    url: https://github.com/Backendless/Flutter-SDK.git
-    ref: master
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  test: ^1.20.1
-  flutter_launcher_icons: ^0.11.0
+  test: ^1.25.15
+  flutter_launcher_icons: ^0.14.4
 
-dependency_overrides:
-  http: ^1.0.0
+
+# ❌ เอา dependency_overrides ออก เพื่อไม่ให้บังคับเวอร์ชันแล้วดึงปลั๊กอินผิดเจน
+# dependency_overrides:
+#   http: ^1.0.0
 
 flutter:
   uses-material-design: true

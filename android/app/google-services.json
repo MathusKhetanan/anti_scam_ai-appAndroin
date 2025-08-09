@@ -12,7 +12,20 @@
           "package_name": "com.example.anti_scam_ai"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "724135108704-uoa1tv0ite6er70otl44vtrvb44svs2b.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.anti_scam_ai",
+            "certificate_hash": "188075b5fb854304432f2d97850a282b7e94104b"
+          }
+        },
+        {
+          "client_id": "724135108704-e22b1r20oq5imiioahbukoievjpb091s.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyB05Y6W5iq2e8sg4lF_exMJu3G1enULoXw"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "724135108704-e22b1r20oq5imiioahbukoievjpb091s.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "724135108704-91b6goca4j847j6l9kckatefl3r3ss68.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.antiScamAi"
+              }
+            }
+          ]
         }
       }
     }
