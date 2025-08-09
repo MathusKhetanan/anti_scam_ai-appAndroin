@@ -239,8 +239,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         backgroundColor: Colors.green[600],
         behavior: SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 3),
       ),
@@ -268,8 +267,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         backgroundColor: Colors.red[600],
         behavior: SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 4),
       ),
@@ -280,10 +278,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
     int strength = 0;
     final reqs = <String>[];
 
-    if (password.length >= 8) strength++; else reqs.add('อย่างน้อย 8 ตัวอักษร');
-    if (password.contains(RegExp(r'[A-Z]'))) strength++; else reqs.add('ตัวพิมพ์ใหญ่');
-    if (password.contains(RegExp(r'[a-z]'))) strength++; else reqs.add('ตัวพิมพ์เล็ก');
-    if (password.contains(RegExp(r'[0-9]'))) strength++; else reqs.add('ตัวเลข');
+    if (password.length >= 8)
+      strength++;
+    else
+      reqs.add('อย่างน้อย 8 ตัวอักษร');
+    if (password.contains(RegExp(r'[A-Z]')))
+      strength++;
+    else
+      reqs.add('ตัวพิมพ์ใหญ่');
+    if (password.contains(RegExp(r'[a-z]')))
+      strength++;
+    else
+      reqs.add('ตัวพิมพ์เล็ก');
+    if (password.contains(RegExp(r'[0-9]')))
+      strength++;
+    else
+      reqs.add('ตัวเลข');
 
     Color color;
     String label;
@@ -316,10 +326,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
           Row(
             children: [
               Text('ความแข็งแกร่ง: ',
-                  style: textTheme.bodySmall?.copyWith(color: Colors.grey[600])),
+                  style:
+                      textTheme.bodySmall?.copyWith(color: Colors.grey[600])),
               Text(label,
-                  style: textTheme.bodySmall?.copyWith(
-                      color: color, fontWeight: FontWeight.w600)),
+                  style: textTheme.bodySmall
+                      ?.copyWith(color: color, fontWeight: FontWeight.w600)),
             ],
           ),
           const SizedBox(height: 4),
@@ -442,8 +453,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     icon: Icon(_obscureConfirmPassword
                         ? Icons.visibility_outlined
                         : Icons.visibility_off_outlined),
-                    onPressed: () => setState(
-                        () => _obscureConfirmPassword = !_obscureConfirmPassword),
+                    onPressed: () => setState(() =>
+                        _obscureConfirmPassword = !_obscureConfirmPassword),
                   ),
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12)),
@@ -459,8 +470,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   Checkbox(
                     value: _acceptTerms,
                     onChanged: (v) => setState(() => _acceptTerms = v ?? false),
-                    shape:
-                        RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4)),
                   ),
                   Expanded(
                     child: GestureDetector(
@@ -514,8 +525,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       child: const SizedBox(
                         width: 22,
                         height: 22,
-                        child:
-                            CircularProgressIndicator(strokeWidth: 2),
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     )
                   : Column(
@@ -530,7 +540,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-
                         Row(
                           children: [
                             Expanded(child: Divider(color: theme.dividerColor)),
@@ -546,7 +555,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ],
                         ),
                         const SizedBox(height: 16),
-
                         SizedBox(
                           height: 50,
                           child: OutlinedButton.icon(
@@ -555,9 +563,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               'assets/google_icon.png',
                               height: 20,
                               width: 20,
-                              errorBuilder: (_, __, ___) =>
-                                  Icon(Icons.g_mobiledata,
-                                      color: theme.colorScheme.primary),
+                              errorBuilder: (_, __, ___) => Icon(
+                                  Icons.g_mobiledata,
+                                  color: theme.colorScheme.primary),
                             ),
                             label: const Text('สมัครด้วย Google'),
                           ),
@@ -643,28 +651,34 @@ class TermsOfServiceScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            _section('1. การยอมรับข้อกำหนด',
+            _section(
+                '1. การยอมรับข้อกำหนด',
                 'การใช้บริการของเราหมายความว่าคุณยอมรับและตกลงที่จะปฏิบัติตามข้อกำหนดและเงื่อนไขเหล่านี้ทั้งหมด หากคุณไม่ยอมรับข้อกำหนดใดๆ กรุณาหยุดการใช้บริการทันที',
                 textTheme),
-            _section('2. การใช้บริการ',
+            _section(
+                '2. การใช้บริการ',
                 '• ต้องมีอายุอย่างน้อย 13 ปี\n'
-                '• รับผิดชอบบัญชีและรหัสผ่านของคุณ\n'
-                '• ห้ามใช้ในทางที่ผิดกฎหมายหรือไม่เหมาะสม',
+                    '• รับผิดชอบบัญชีและรหัสผ่านของคุณ\n'
+                    '• ห้ามใช้ในทางที่ผิดกฎหมายหรือไม่เหมาะสม',
                 textTheme),
-            _section('3. ความเป็นส่วนตัวของข้อมูล',
+            _section(
+                '3. ความเป็นส่วนตัวของข้อมูล',
                 'การเก็บ ใช้ และเปิดเผยข้อมูลเป็นไปตามนโยบายความเป็นส่วนตัว',
                 textTheme),
-            _section('4. การระงับและยกเลิกบัญชี',
+            _section(
+                '4. การระงับและยกเลิกบัญชี',
                 'เราอาจระงับ/ยกเลิกบัญชีหากฝ่าฝืนเงื่อนไข โดยไม่ต้องแจ้งล่วงหน้า',
                 textTheme),
-            _section('5. ข้อจำกัดความรับผิดชอบ',
+            _section(
+                '5. ข้อจำกัดความรับผิดชอบ',
                 'ไม่รับผิดชอบต่อความเสียหายจากการใช้หรือไม่สามารถใช้บริการ',
                 textTheme),
-            _section('6. การแก้ไขข้อกำหนด',
+            _section(
+                '6. การแก้ไขข้อกำหนด',
                 'เราอาจแก้ไขข้อกำหนดได้ตลอดเวลา และมีผลเมื่อเผยแพร่',
                 textTheme),
-            _section('7. กฎหมายที่ใช้บังคับ',
-                'อยู่ภายใต้กฎหมายของประเทศไทย', textTheme),
+            _section('7. กฎหมายที่ใช้บังคับ', 'อยู่ภายใต้กฎหมายของประเทศไทย',
+                textTheme),
             const SizedBox(height: 24),
           ],
         ),
@@ -679,8 +693,8 @@ class TermsOfServiceScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title,
-              style: textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w600)),
+              style:
+                  textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           Text(body,
               style: textTheme.bodyMedium
@@ -721,15 +735,20 @@ class PrivacyPolicyScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            _section('1. ข้อมูลที่เราเก็บรวบรวม',
+            _section(
+                '1. ข้อมูลที่เราเก็บรวบรวม',
                 '• ข้อมูลส่วนบุคคล (อีเมล ชื่อ)\n'
-                '• ข้อมูลการใช้งานแอป\n'
-                '• ข้อมูลอุปกรณ์', textTheme),
-            _section('2. วิธีการใช้ข้อมูลของคุณ',
+                    '• ข้อมูลการใช้งานแอป\n'
+                    '• ข้อมูลอุปกรณ์',
+                textTheme),
+            _section(
+                '2. วิธีการใช้ข้อมูลของคุณ',
                 '• ให้บริการและปรับปรุงระบบ\n'
-                '• ส่งการแจ้งเตือนที่จำเป็น\n'
-                '• วิเคราะห์การใช้งาน', textTheme),
-            _section('3. การแชร์ข้อมูลกับบุคคลที่สาม',
+                    '• ส่งการแจ้งเตือนที่จำเป็น\n'
+                    '• วิเคราะห์การใช้งาน',
+                textTheme),
+            _section(
+                '3. การแชร์ข้อมูลกับบุคคลที่สาม',
                 'เราไม่ขาย/เช่าข้อมูล เว้นแต่ได้รับความยินยอมหรือเพื่อปฏิบัติตามกฎหมาย',
                 textTheme),
             _section('4. ความปลอดภัยของข้อมูล',
@@ -754,8 +773,8 @@ class PrivacyPolicyScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title,
-              style: textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w600)),
+              style:
+                  textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           Text(body,
               style: textTheme.bodyMedium

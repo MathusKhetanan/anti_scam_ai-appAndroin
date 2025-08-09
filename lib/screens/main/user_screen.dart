@@ -55,7 +55,7 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     );
-    
+
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
     );
@@ -102,9 +102,9 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
         _populateControllers();
       }
 
-      _userStats = statsSnapshot.exists 
-        ? statsSnapshot.data() as Map<String, dynamic>?
-        : _getDefaultStats();
+      _userStats = statsSnapshot.exists
+          ? statsSnapshot.data() as Map<String, dynamic>?
+          : _getDefaultStats();
 
       _setLoadingState(false, true);
       _startAnimations();
@@ -177,9 +177,10 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
     });
   }
 
-  Future<void> _updateProfileData(String userId, Map<String, dynamic> profileData) async {
+  Future<void> _updateProfileData(
+      String userId, Map<String, dynamic> profileData) async {
     setState(() => _isUpdating = true);
-    
+
     try {
       await _firestore.collection('profiles').doc(userId).set(
         {
@@ -190,7 +191,7 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
         },
         SetOptions(merge: true),
       );
-      
+
       _showSuccessSnackBar('อัปเดตข้อมูลเรียบร้อยแล้ว');
       await _checkLoginStatusAndFetchProfile();
     } catch (e) {
@@ -332,15 +333,16 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
     try {
       final date = await showDatePicker(
         context: context,
-        initialDate: _dobController.text.isNotEmpty 
-          ? DateTime.tryParse(_dobController.text) ?? DateTime.now()
-          : DateTime.now(),
+        initialDate: _dobController.text.isNotEmpty
+            ? DateTime.tryParse(_dobController.text) ?? DateTime.now()
+            : DateTime.now(),
         firstDate: DateTime(1950),
         lastDate: DateTime.now(),
       );
-      
+
       if (date != null) {
-        _dobController.text = "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+        _dobController.text =
+            "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
       }
     } catch (e) {
       debugPrint('Error selecting date: $e');
@@ -375,12 +377,12 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
               elevation: 4,
             ),
             child: _isUpdating
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('บันทึก'),
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('บันทึก'),
           ),
         ),
       ],
@@ -420,24 +422,24 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
     if (value == null || value.trim().isEmpty) {
       return 'กรุณากรอกเบอร์โทรศัพท์';
     }
-    
+
     final cleanPhone = value.replaceAll(RegExp(r'[^\d]'), '');
-    
+
     if (cleanPhone.length != 10) {
       return 'เบอร์โทรศัพท์ต้องมี 10 หลัก';
     }
-    
+
     if (!cleanPhone.startsWith('0')) {
       return 'เบอร์โทรศัพท์ต้องขึ้นต้นด้วย 0';
     }
-    
+
     final validPrefixes = ['08', '09', '06', '02'];
     final prefix = cleanPhone.substring(0, 2);
-    
+
     if (!validPrefixes.contains(prefix)) {
       return 'เบอร์โทรศัพท์ไม่ถูกต้อง';
     }
-    
+
     return null;
   }
 
@@ -459,7 +461,8 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(
             children: [
               Icon(Icons.lock_outline),
@@ -479,7 +482,9 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
                     labelText: 'รหัสผ่านปัจจุบัน',
                     prefixIcon: Icon(Icons.lock),
                   ),
-                  validator: (value) => value?.isEmpty == true ? 'กรุณากรอกรหัสผ่านปัจจุบัน' : null,
+                  validator: (value) => value?.isEmpty == true
+                      ? 'กรุณากรอกรหัสผ่านปัจจุบัน'
+                      : null,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -491,7 +496,8 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
                   ),
                   validator: (value) {
                     if (value?.isEmpty == true) return 'กรุณากรอกรหัสผ่านใหม่';
-                    if (value!.length < 6) return 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+                    if (value!.length < 6)
+                      return 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
                     return null;
                   },
                 ),
@@ -515,40 +521,43 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
           ),
           actions: [
             TextButton(
-              onPressed: isChangingPassword ? null : () => Navigator.pop(context),
+              onPressed:
+                  isChangingPassword ? null : () => Navigator.pop(context),
               child: const Text('ยกเลิก'),
             ),
             ElevatedButton(
-              onPressed: isChangingPassword ? null : () async {
-                if (!formKey.currentState!.validate()) return;
-                
-                setDialogState(() => isChangingPassword = true);
-                
-                try {
-                  final user = _auth.currentUser;
-                  final credential = EmailAuthProvider.credential(
-                    email: user!.email!,
-                    password: currentPasswordController.text,
-                  );
-                  
-                  await user.reauthenticateWithCredential(credential);
-                  await user.updatePassword(newPasswordController.text);
-                  
-                  Navigator.pop(context);
-                  _showSuccessSnackBar('เปลี่ยนรหัสผ่านเรียบร้อย');
-                } catch (e) {
-                  _handleError('เกิดข้อผิดพลาด: $e');
-                } finally {
-                  setDialogState(() => isChangingPassword = false);
-                }
-              },
+              onPressed: isChangingPassword
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+
+                      setDialogState(() => isChangingPassword = true);
+
+                      try {
+                        final user = _auth.currentUser;
+                        final credential = EmailAuthProvider.credential(
+                          email: user!.email!,
+                          password: currentPasswordController.text,
+                        );
+
+                        await user.reauthenticateWithCredential(credential);
+                        await user.updatePassword(newPasswordController.text);
+
+                        Navigator.pop(context);
+                        _showSuccessSnackBar('เปลี่ยนรหัสผ่านเรียบร้อย');
+                      } catch (e) {
+                        _handleError('เกิดข้อผิดพลาด: $e');
+                      } finally {
+                        setDialogState(() => isChangingPassword = false);
+                      }
+                    },
               child: isChangingPassword
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('เปลี่ยนรหัสผ่าน'),
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('เปลี่ยนรหัสผ่าน'),
             ),
           ],
         ),
@@ -558,46 +567,54 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
 
   // Navigation handlers with error handling
   void _navigateToHistory() {
-  Navigator.pushNamed(context, '/history');
-}
+    Navigator.pushNamed(context, '/history');
+  }
 
   void _navigateToReport() {
     try {
       Navigator.pushNamed(context, '/report').catchError((error) {
-        _showTemporaryScreen('รายงานหมายเลขหลอกลวง', 'หน้ารายงานหมายเลขหลอกลวงยังไม่พร้อมใช้งาน', Icons.report_problem);
+        _showTemporaryScreen('รายงานหมายเลขหลอกลวง',
+            'หน้ารายงานหมายเลขหลอกลวงยังไม่พร้อมใช้งาน', Icons.report_problem);
       });
     } catch (e) {
-      _showTemporaryScreen('รายงานหมายเลขหลอกลวง', 'หน้ารายงานหมายเลขหลอกลวงยังไม่พร้อมใช้งาน', Icons.report_problem);
+      _showTemporaryScreen('รายงานหมายเลขหลอกลวง',
+          'หน้ารายงานหมายเลขหลอกลวงยังไม่พร้อมใช้งาน', Icons.report_problem);
     }
   }
 
   void _navigateToSecurity() {
     try {
       Navigator.pushNamed(context, '/security').catchError((error) {
-        _showTemporaryScreen('ตั้งค่าความปลอดภัย', 'หน้าตั้งค่าความปลอดภัยยังไม่พร้อมใช้งาน', Icons.shield);
+        _showTemporaryScreen('ตั้งค่าความปลอดภัย',
+            'หน้าตั้งค่าความปลอดภัยยังไม่พร้อมใช้งาน', Icons.shield);
       });
     } catch (e) {
-      _showTemporaryScreen('ตั้งค่าความปลอดภัย', 'หน้าตั้งค่าความปลอดภัยยังไม่พร้อมใช้งาน', Icons.shield);
+      _showTemporaryScreen('ตั้งค่าความปลอดภัย',
+          'หน้าตั้งค่าความปลอดภัยยังไม่พร้อมใช้งาน', Icons.shield);
     }
   }
 
   void _navigateToNotifications() {
     try {
       Navigator.pushNamed(context, '/notifications').catchError((error) {
-        _showTemporaryScreen('การแจ้งเตือน', 'หน้าการแจ้งเตือนยังไม่พร้อมใช้งาน', Icons.notifications);
+        _showTemporaryScreen('การแจ้งเตือน',
+            'หน้าการแจ้งเตือนยังไม่พร้อมใช้งาน', Icons.notifications);
       });
     } catch (e) {
-      _showTemporaryScreen('การแจ้งเตือน', 'หน้าการแจ้งเตือนยังไม่พร้อมใช้งาน', Icons.notifications);
+      _showTemporaryScreen('การแจ้งเตือน', 'หน้าการแจ้งเตือนยังไม่พร้อมใช้งาน',
+          Icons.notifications);
     }
   }
 
   void _navigateToHelp() {
     try {
       Navigator.pushNamed(context, '/help').catchError((error) {
-        _showTemporaryScreen('ความช่วยเหลือ', 'หน้าความช่วยเหลือยังไม่พร้อมใช้งาน', Icons.help_outline);
+        _showTemporaryScreen('ความช่วยเหลือ',
+            'หน้าความช่วยเหลือยังไม่พร้อมใช้งาน', Icons.help_outline);
       });
     } catch (e) {
-      _showTemporaryScreen('ความช่วยเหลือ', 'หน้าความช่วยเหลือยังไม่พร้อมใช้งาน', Icons.help_outline);
+      _showTemporaryScreen('ความช่วยเหลือ',
+          'หน้าความช่วยเหลือยังไม่พร้อมใช้งาน', Icons.help_outline);
     }
   }
 
@@ -626,16 +643,16 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
                   Text(
                     title,
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                          fontWeight: FontWeight.bold,
+                        ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
                   Text(
                     message,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Colors.grey[600],
-                    ),
+                          color: Colors.grey[600],
+                        ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 32),
@@ -734,8 +751,8 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
                   Text(
                     'สถิติการใช้งาน',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                          fontWeight: FontWeight.bold,
+                        ),
                   ),
                   const Spacer(),
                   _buildRefreshButton(),
@@ -779,9 +796,9 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
                     child: _buildStatItem(
                       icon: Icons.schedule,
                       title: 'สแกนล่าสุด',
-                      value: _userStats?['last_scan_date'] != null 
-                        ? _formatDate(_userStats!['last_scan_date'])
-                        : 'ยังไม่เคย',
+                      value: _userStats?['last_scan_date'] != null
+                          ? _formatDate(_userStats!['last_scan_date'])
+                          : 'ยังไม่เคย',
                       color: Colors.green,
                     ),
                   ),
@@ -852,11 +869,11 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
       final date = DateTime.parse(dateString);
       final now = DateTime.now();
       final difference = now.difference(date).inDays;
-      
+
       if (difference == 0) return 'วันนี้';
       if (difference == 1) return 'เมื่อวาน';
       if (difference < 7) return '$difference วันที่แล้ว';
-      
+
       return '${date.day}/${date.month}/${date.year}';
     } catch (e) {
       return 'ไม่ทราบ';
@@ -878,7 +895,8 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
           children: [
             Icon(
               isDestructive ? Icons.warning : Icons.info,
-              color: isDestructive ? Colors.red : Theme.of(context).primaryColor,
+              color:
+                  isDestructive ? Colors.red : Theme.of(context).primaryColor,
             ),
             const SizedBox(width: 8),
             Text(title),
@@ -972,7 +990,8 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: (iconColor ?? Theme.of(context).primaryColor).withOpacity(0.1),
+                        color: (iconColor ?? Theme.of(context).primaryColor)
+                            .withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
@@ -1118,7 +1137,8 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
                         try {
                           Navigator.pushNamed(context, '/login');
                         } catch (e) {
-                          _showSuccessSnackBar('หน้าเข้าสู่ระบบยังไม่พร้อมใช้งาน');
+                          _showSuccessSnackBar(
+                              'หน้าเข้าสู่ระบบยังไม่พร้อมใช้งาน');
                         }
                       },
                       icon: const Icon(Icons.login),
@@ -1137,7 +1157,8 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
                       try {
                         Navigator.pushNamed(context, '/register');
                       } catch (e) {
-                        _showSuccessSnackBar('หน้าสมัครสมาชิกยังไม่พร้อมใช้งาน');
+                        _showSuccessSnackBar(
+                            'หน้าสมัครสมาชิกยังไม่พร้อมใช้งาน');
                       }
                     },
                     icon: const Icon(Icons.person_add),
@@ -1287,8 +1308,8 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
           Text(
             userName,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+                  fontWeight: FontWeight.bold,
+                ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
@@ -1367,8 +1388,8 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
             child: Text(
               userEmail,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).primaryColor,
-              ),
+                    color: Theme.of(context).primaryColor,
+                  ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -1423,8 +1444,8 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
               Text(
                 'ข้อมูลส่วนตัว',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                      fontWeight: FontWeight.bold,
+                    ),
               ),
               const Spacer(),
               IconButton(
@@ -1432,18 +1453,22 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
                 icon: const Icon(Icons.edit, size: 20),
                 tooltip: 'แก้ไขข้อมูล',
                 style: IconButton.styleFrom(
-                  backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                  backgroundColor:
+                      Theme.of(context).primaryColor.withOpacity(0.1),
                   minimumSize: const Size(32, 32),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 20),
-          _buildInfoRow(Icons.phone, 'เบอร์โทรศัพท์', _userProfile?['phone'] ?? 'ไม่ได้ระบุ'),
+          _buildInfoRow(Icons.phone, 'เบอร์โทรศัพท์',
+              _userProfile?['phone'] ?? 'ไม่ได้ระบุ'),
           const SizedBox(height: 16),
-          _buildInfoRow(Icons.calendar_today, 'วันเกิด', _formatBirthDate(_userProfile?['dob'])),
+          _buildInfoRow(Icons.calendar_today, 'วันเกิด',
+              _formatBirthDate(_userProfile?['dob'])),
           const SizedBox(height: 16),
-          _buildInfoRow(Icons.location_on, 'ที่อยู่', _userProfile?['address'] ?? 'ไม่ได้ระบุ'),
+          _buildInfoRow(Icons.location_on, 'ที่อยู่',
+              _userProfile?['address'] ?? 'ไม่ได้ระบุ'),
         ],
       ),
     );
@@ -1484,8 +1509,8 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
               Text(
                 'การจัดการบัญชี',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                      fontWeight: FontWeight.bold,
+                    ),
               ),
             ],
           ),
@@ -1609,15 +1634,15 @@ class _UserScreenState extends State<UserScreen> with TickerProviderStateMixin {
               Text(
                 label,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
               ),
               const SizedBox(height: 2),
               Text(
                 value,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                ),
+                      fontWeight: FontWeight.w500,
+                    ),
               ),
             ],
           ),

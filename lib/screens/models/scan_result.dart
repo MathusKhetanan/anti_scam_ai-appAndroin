@@ -1,65 +1,87 @@
 class ScanResult {
-  final String id;
-  final String message;
-  final String prediction;
-  final bool isScam;
-  final DateTime timestamp;
-  final String? source; // SMS, WhatsApp, etc.
-  
-  // เพิ่ม properties สำหรับ home_screen.dart
-  final String sender;
-  final DateTime dateTime;
-  final double score;
-  final String reason;
+  final String id; // ไอดีข้อความ (unique)
+  final String sender; // ผู้ส่งข้อความ
+  final String message; // เนื้อความ
+  final String prediction; // ผลการทำนาย ('scam' / 'safe' / 'unknown')
+  final double probability; // ความมั่นใจของ AI (0..1)  -> มีค่า default
+  final DateTime dateTime; // เวลาแสดงผล
+  final DateTime timestamp; // เวลา raw
+  final String reason; // เหตุผลที่ตัดสินใจ
+  final bool isScam; // true = มิจฉาชีพ
+  final String label; // label ของ AI            -> มีค่า default
+  final double score; // คะแนนความมั่นใจ (เผื่อ API ใช้สเกลอื่น)
 
   ScanResult({
     required this.id,
+    required this.sender,
     required this.message,
     required this.prediction,
-    required this.isScam,
+    this.probability = 0.0, // ✅ default
+    required this.dateTime,
     required this.timestamp,
-    this.source,
-    // เพิ่ม parameters ใหม่
-    required this.sender,
+    required this.reason,
+    required this.isScam,
+    this.label = 'safe', // ✅ default
+    required this.score,
+  });
+
+  ScanResult copyWith({
+    String? id,
+    String? sender,
+    String? message,
+    String? prediction,
+    double? probability,
     DateTime? dateTime,
-    this.score = 0.0,
-    this.reason = '',
-  }) : dateTime = dateTime ?? timestamp;
-
-  // Convert to JSON
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'message': message,
-      'prediction': prediction,
-      'isScam': isScam,
-      'timestamp': timestamp.toIso8601String(),
-      'source': source,
-      'sender': sender,
-      'dateTime': dateTime.toIso8601String(),
-      'score': score,
-      'reason': reason,
-    };
-  }
-
-  // Create from JSON
-  factory ScanResult.fromJson(Map<String, dynamic> json) {
+    DateTime? timestamp,
+    String? reason,
+    bool? isScam,
+    String? label,
+    double? score,
+  }) {
     return ScanResult(
-      id: json['id'],
-      message: json['message'],
-      prediction: json['prediction'],
-      isScam: json['isScam'],
-      timestamp: DateTime.parse(json['timestamp']),
-      source: json['source'],
-      sender: json['sender'] ?? '',
-      dateTime: json['dateTime'] != null ? DateTime.parse(json['dateTime']) : null,
-      score: (json['score'] ?? 0.0).toDouble(),
-      reason: json['reason'] ?? '',
+      id: id ?? this.id,
+      sender: sender ?? this.sender,
+      message: message ?? this.message,
+      prediction: prediction ?? this.prediction,
+      probability: probability ?? this.probability,
+      dateTime: dateTime ?? this.dateTime,
+      timestamp: timestamp ?? this.timestamp,
+      reason: reason ?? this.reason,
+      isScam: isScam ?? this.isScam,
+      label: label ?? this.label,
+      score: score ?? this.score,
     );
   }
 
-  @override
-  String toString() {
-    return 'ScanResult(id: $id, prediction: $prediction, isScam: $isScam)';
-  }
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'sender': sender,
+        'message': message,
+        'prediction': prediction,
+        'probability': probability,
+        'dateTime': dateTime.toIso8601String(),
+        'timestamp': timestamp.toIso8601String(),
+        'reason': reason,
+        'isScam': isScam,
+        'label': label,
+        'score': score,
+      };
+
+  factory ScanResult.fromJson(Map<String, dynamic> json) => ScanResult(
+        id: json['id']?.toString() ?? '',
+        sender: json['sender']?.toString() ?? '',
+        message: json['message']?.toString() ?? '',
+        prediction: (json['prediction'] ?? 'unknown').toString(),
+        probability: (json['probability'] is num)
+            ? (json['probability'] as num).toDouble()
+            : 0.0, // ✅ รองรับ cache เก่าที่ไม่มี field
+        dateTime: DateTime.tryParse((json['dateTime'] ?? '').toString()) ??
+            DateTime.now(),
+        timestamp: DateTime.tryParse((json['timestamp'] ?? '').toString()) ??
+            DateTime.now(),
+        reason: (json['reason'] ?? '').toString(),
+        isScam: (json['isScam'] ?? false) == true,
+        label: (json['label'] ?? 'safe').toString(), // ✅ default
+        score: (json['score'] is num) ? (json['score'] as num).toDouble() : 0.0,
+      );
 }

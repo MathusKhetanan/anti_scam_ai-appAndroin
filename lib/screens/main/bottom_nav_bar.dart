@@ -15,7 +15,7 @@ class BottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    
+
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
@@ -97,7 +97,7 @@ class BottomNavBar extends StatelessWidget {
     required bool isSelected,
   }) {
     final theme = Theme.of(context);
-    
+
     return Expanded(
       child: Material(
         color: Colors.transparent,
@@ -116,7 +116,7 @@ class BottomNavBar extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 8),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              color: isSelected 
+              color: isSelected
                   ? theme.colorScheme.primary.withOpacity(0.12)
                   : Colors.transparent,
             ),

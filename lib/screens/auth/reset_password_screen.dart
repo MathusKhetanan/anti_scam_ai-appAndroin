@@ -24,12 +24,13 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     if (value == null || value.trim().isEmpty) {
       return 'กรุณากรอกอีเมล';
     }
-    
-    final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+
+    final emailRegex =
+        RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
     if (!emailRegex.hasMatch(value.trim())) {
       return 'รูปแบบอีเมลไม่ถูกต้อง';
     }
-    
+
     return null;
   }
 
@@ -43,7 +44,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     try {
       final email = _emailController.text.trim();
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-      
+
       if (mounted) {
         setState(() => _isEmailSent = true);
         _showSuccessSnackBar('ส่งลิงก์รีเซ็ตรหัสผ่านเรียบร้อยแล้ว');
@@ -76,7 +77,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+            const Icon(Icons.check_circle_outline,
+                color: Colors.white, size: 20),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -156,15 +158,18 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: _isEmailSent 
+                    color: _isEmailSent
                         ? Colors.green.withOpacity(0.1)
                         : theme.colorScheme.primary.withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    _isEmailSent ? Icons.mark_email_read_outlined : Icons.lock_reset,
+                    _isEmailSent
+                        ? Icons.mark_email_read_outlined
+                        : Icons.lock_reset,
                     size: 60,
-                    color: _isEmailSent ? Colors.green : theme.colorScheme.primary,
+                    color:
+                        _isEmailSent ? Colors.green : theme.colorScheme.primary,
                   ),
                 ),
               ),
@@ -248,7 +253,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: theme.primaryColor, width: 2),
+                      borderSide:
+                          BorderSide(color: theme.primaryColor, width: 2),
                     ),
                     errorBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -306,7 +312,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           icon: const Icon(Icons.send, size: 20),
                           label: const Text(
                             'ส่งลิงก์รีเซ็ตรหัสผ่าน',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w600),
                           ),
                           style: ElevatedButton.styleFrom(
                             shape: RoundedRectangleBorder(
@@ -324,19 +331,23 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 SizedBox(
                   height: 50,
                   child: OutlinedButton.icon(
-                    onPressed: _isLoading ? null : () {
-                      setState(() => _isEmailSent = false);
-                    },
+                    onPressed: _isLoading
+                        ? null
+                        : () {
+                            setState(() => _isEmailSent = false);
+                          },
                     icon: const Icon(Icons.refresh, size: 20),
                     label: const Text(
                       'ส่งลิงก์อีกครั้ง',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                     style: OutlinedButton.styleFrom(
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      side: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+                      side: BorderSide(
+                          color: theme.colorScheme.primary, width: 1.5),
                       foregroundColor: theme.colorScheme.primary,
                     ),
                   ),
@@ -358,7 +369,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    foregroundColor: theme.colorScheme.onSurface.withOpacity(0.7),
+                    foregroundColor:
+                        theme.colorScheme.onSurface.withOpacity(0.7),
                   ),
                 ),
               ),

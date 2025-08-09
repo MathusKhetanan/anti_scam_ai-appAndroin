@@ -89,7 +89,9 @@ class _ScanScreenState extends State<ScanScreen> {
               _resultText,
               style: TextStyle(
                 fontSize: 18,
-                color: _resultText.contains('น่าสงสัย') ? Colors.red : Colors.green,
+                color: _resultText.contains('น่าสงสัย')
+                    ? Colors.red
+                    : Colors.green,
                 fontWeight: FontWeight.bold,
               ),
               textAlign: TextAlign.center,

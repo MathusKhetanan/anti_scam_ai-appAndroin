@@ -49,7 +49,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String? _validateEmail(String? value) {
     if (value == null || value.trim().isEmpty) return 'กรุณากรอกอีเมล';
-    final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+    final emailRegex =
+        RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
     if (!emailRegex.hasMatch(value.trim())) return 'รูปแบบอีเมลไม่ถูกต้อง';
     return null;
   }
@@ -93,7 +94,8 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
-      final UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+      final UserCredential userCredential =
+          await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
@@ -130,14 +132,16 @@ class _LoginScreenState extends State<LoginScreen> {
       final gsi.GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) return;
 
-      final gsi.GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final gsi.GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
 
       final credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
         accessToken: googleAuth.accessToken, // v6 ยังใช้ได้
       );
 
-      final userCred = await FirebaseAuth.instance.signInWithCredential(credential);
+      final userCred =
+          await FirebaseAuth.instance.signInWithCredential(credential);
       if (userCred.user != null && mounted) {
         await _saveUserToFirestore(userCred.user!);
         await _showSuccessAndNavigate();

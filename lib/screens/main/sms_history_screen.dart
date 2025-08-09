@@ -9,7 +9,8 @@ class HistoryScreen extends StatefulWidget {
   State<HistoryScreen> createState() => _HistoryScreenState();
 }
 
-class _HistoryScreenState extends State<HistoryScreen> with TickerProviderStateMixin {
+class _HistoryScreenState extends State<HistoryScreen>
+    with TickerProviderStateMixin {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -49,7 +50,7 @@ class _HistoryScreenState extends State<HistoryScreen> with TickerProviderStateM
 
   Future<void> _loadHistoryData() async {
     if (!mounted) return;
-    
+
     try {
       final user = _auth.currentUser;
       if (user == null) {
@@ -74,16 +75,20 @@ class _HistoryScreenState extends State<HistoryScreen> with TickerProviderStateM
           .get();
 
       setState(() {
-        _smsCheckHistory = smsQuery.docs.map((doc) => {
-          'id': doc.id,
-          ...doc.data() as Map<String, dynamic>,
-        }).toList();
-        
-        _reportHistory = reportQuery.docs.map((doc) => {
-          'id': doc.id,
-          ...doc.data() as Map<String, dynamic>,
-        }).toList();
-        
+        _smsCheckHistory = smsQuery.docs
+            .map((doc) => {
+                  'id': doc.id,
+                  ...doc.data() as Map<String, dynamic>,
+                })
+            .toList();
+
+        _reportHistory = reportQuery.docs
+            .map((doc) => {
+                  'id': doc.id,
+                  ...doc.data() as Map<String, dynamic>,
+                })
+            .toList();
+
         _isLoading = false;
       });
 
@@ -348,8 +353,8 @@ class _HistoryScreenState extends State<HistoryScreen> with TickerProviderStateM
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  smsContent.length > 100 
-                      ? '${smsContent.substring(0, 100)}...' 
+                  smsContent.length > 100
+                      ? '${smsContent.substring(0, 100)}...'
                       : smsContent,
                   style: const TextStyle(
                     fontSize: 13,
@@ -616,11 +621,15 @@ class _HistoryScreenState extends State<HistoryScreen> with TickerProviderStateM
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildDetailRow('ผู้ส่ง', smsCheck['sender_number'] ?? 'ไม่ทราบ'),
-              _buildDetailRow('วันที่ตรวจสอบ', _formatDateTime(smsCheck['check_date'])),
-              _buildDetailRow('ผลการตรวจสอบ', _getResultText(smsCheck['result'])),
-              _buildDetailRow('ระดับความเสี่ยง', '${smsCheck['risk_level'] ?? 0}%'),
+              _buildDetailRow(
+                  'วันที่ตรวจสอบ', _formatDateTime(smsCheck['check_date'])),
+              _buildDetailRow(
+                  'ผลการตรวจสอบ', _getResultText(smsCheck['result'])),
+              _buildDetailRow(
+                  'ระดับความเสี่ยง', '${smsCheck['risk_level'] ?? 0}%'),
               if (smsCheck['scam_type'] != null)
-                _buildDetailRow('ประเภทหลอกลวง', _getScamTypeText(smsCheck['scam_type'])),
+                _buildDetailRow(
+                    'ประเภทหลอกลวง', _getScamTypeText(smsCheck['scam_type'])),
               const SizedBox(height: 12),
               const Text(
                 'เนื้อหา SMS:',
@@ -653,7 +662,9 @@ class _HistoryScreenState extends State<HistoryScreen> with TickerProviderStateM
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text('• ', style: TextStyle(color: Colors.red)),
-                        Expanded(child: Text(reason, style: const TextStyle(fontSize: 12))),
+                        Expanded(
+                            child: Text(reason,
+                                style: const TextStyle(fontSize: 12))),
                       ],
                     ),
                   ),
@@ -665,7 +676,8 @@ class _HistoryScreenState extends State<HistoryScreen> with TickerProviderStateM
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('ปิด', style: TextStyle(color: Color(0xFF2E7D32))),
+            child:
+                const Text('ปิด', style: TextStyle(color: Color(0xFF2E7D32))),
           ),
         ],
       ),
@@ -692,8 +704,10 @@ class _HistoryScreenState extends State<HistoryScreen> with TickerProviderStateM
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildDetailRow('ผู้ส่ง', report['sender_number'] ?? 'ไม่ทราบ'),
-              _buildDetailRow('วันที่รายงาน', _formatDateTime(report['report_date'])),
-              _buildDetailRow('ประเภทหลอกลวง', _getScamTypeText(report['scam_type'])),
+              _buildDetailRow(
+                  'วันที่รายงาน', _formatDateTime(report['report_date'])),
+              _buildDetailRow(
+                  'ประเภทหลอกลวง', _getScamTypeText(report['scam_type'])),
               _buildDetailRow('สถานะ', _getStatusText(report['status'])),
               if (report['description'] != null) ...[
                 const SizedBox(height: 12),
@@ -742,7 +756,8 @@ class _HistoryScreenState extends State<HistoryScreen> with TickerProviderStateM
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('ปิด', style: TextStyle(color: Color(0xFF2E7D32))),
+            child:
+                const Text('ปิด', style: TextStyle(color: Color(0xFF2E7D32))),
           ),
         ],
       ),
@@ -774,7 +789,7 @@ class _HistoryScreenState extends State<HistoryScreen> with TickerProviderStateM
 
   String _formatDateTime(dynamic dateTime) {
     if (dateTime == null) return 'ไม่ทราบ';
-    
+
     try {
       DateTime date;
       if (dateTime is Timestamp) {
@@ -804,38 +819,60 @@ class _HistoryScreenState extends State<HistoryScreen> with TickerProviderStateM
 
   String _getResultText(String? result) {
     switch (result) {
-      case 'safe': return 'ปลอดภัย';
-      case 'suspicious': return 'น่าสงสัย';
-      case 'scam': return 'หลอกลวง';
-      default: return 'ไม่ทราบ';
+      case 'safe':
+        return 'ปลอดภัย';
+      case 'suspicious':
+        return 'น่าสงสัย';
+      case 'scam':
+        return 'หลอกลวง';
+      default:
+        return 'ไม่ทราบ';
     }
   }
 
   String _getScamTypeText(String? type) {
     switch (type) {
-      case 'phishing': return 'ฟิชชิ่ง (ขโมยข้อมูล)';
-      case 'fake_bank': return 'ปลอมแปลงธนาคาร';
-      case 'fake_gov': return 'ปลอมแปลงหน่วยงานราชการ';
-      case 'lottery_scam': return 'หลอกถูกลอตเตอรี่';
-      case 'investment_scam': return 'หลอกลงทุน';
-      case 'loan_scam': return 'หลอกให้กู้เงิน';
-      case 'prize_scam': return 'หลอกได้รางวัล';
-      case 'romance_scam': return 'หลอกความรัก';
-      case 'job_scam': return 'หลอกหางาน';
-      case 'delivery_scam': return 'ปลอมแปลงขนส่ง';
-      case 'covid_scam': return 'หลอกเกี่ยวกับโควิด';
-      case 'other': return 'อื่นๆ';
-      default: return 'ไม่ระบุประเภท';
+      case 'phishing':
+        return 'ฟิชชิ่ง (ขโมยข้อมูล)';
+      case 'fake_bank':
+        return 'ปลอมแปลงธนาคาร';
+      case 'fake_gov':
+        return 'ปลอมแปลงหน่วยงานราชการ';
+      case 'lottery_scam':
+        return 'หลอกถูกลอตเตอรี่';
+      case 'investment_scam':
+        return 'หลอกลงทุน';
+      case 'loan_scam':
+        return 'หลอกให้กู้เงิน';
+      case 'prize_scam':
+        return 'หลอกได้รางวัล';
+      case 'romance_scam':
+        return 'หลอกความรัก';
+      case 'job_scam':
+        return 'หลอกหางาน';
+      case 'delivery_scam':
+        return 'ปลอมแปลงขนส่ง';
+      case 'covid_scam':
+        return 'หลอกเกี่ยวกับโควิด';
+      case 'other':
+        return 'อื่นๆ';
+      default:
+        return 'ไม่ระบุประเภท';
     }
   }
 
   String _getStatusText(String? status) {
     switch (status) {
-      case 'approved': return 'อนุมัติแล้ว';
-      case 'rejected': return 'ปฏิเสธ';
-      case 'under_review': return 'กำลังตรวจสอบ';
-      case 'pending': return 'รอการตรวจสอบ';
-      default: return 'ไม่ทราบสถานะ';
+      case 'approved':
+        return 'อนุมัติแล้ว';
+      case 'rejected':
+        return 'ปฏิเสธ';
+      case 'under_review':
+        return 'กำลังตรวจสอบ';
+      case 'pending':
+        return 'รอการตรวจสอบ';
+      default:
+        return 'ไม่ทราบสถานะ';
     }
   }
 

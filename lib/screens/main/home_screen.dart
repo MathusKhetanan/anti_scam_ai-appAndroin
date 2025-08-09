@@ -4,8 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/scan_result.dart';
-// ✅ เปลี่ยนจาก sms_model_service เป็น ApiService
-import '../../main.dart'; // import ApiService
+import '../../services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,20 +19,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool isLoading = false;
   bool protectionEnabled = true;
   bool modelReady = false;
-  
+
   // สถิติ
   int messagesCheckedToday = 0;
   int scamDetectedToday = 0;
   int safeMessagesToday = 0;
-  
+
   // Cache
   Map<String, ScanResult> _scanCache = {};
   SharedPreferences? _prefs;
-  
+
   // Animation Controllers
   late AnimationController _refreshController;
   late AnimationController _statsController;
-  
+
   @override
   void initState() {
     super.initState();
@@ -41,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _initCache();
     _loadModelAndData();
   }
-  
+
   @override
   void dispose() {
     _refreshController.dispose();
@@ -49,7 +48,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _saveCache();
     super.dispose();
   }
-  
+
   void _initAnimations() {
     _refreshController = AnimationController(
       duration: const Duration(milliseconds: 1000),
@@ -60,68 +59,82 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       vsync: this,
     );
   }
-  
+
   Future<void> _initCache() async {
     try {
       _prefs = await SharedPreferences.getInstance();
       final cacheString = _prefs?.getString('sms_scan_cache') ?? '{}';
       final cacheData = json.decode(cacheString) as Map<String, dynamic>;
-      
+
       _scanCache = cacheData.map((key, value) {
         final data = Map<String, dynamic>.from(value);
-        return MapEntry(key, ScanResult(
-          id: data['id'] ?? '',
-          sender: data['sender'] ?? '',
-          message: data['message'] ?? '',
-          prediction: data['prediction'] ?? 'safe',
-          isScam: data['isScam'] ?? false,
-          timestamp: DateTime.parse(data['timestamp'] ?? DateTime.now().toIso8601String()),
-          dateTime: DateTime.parse(data['dateTime'] ?? DateTime.now().toIso8601String()),
-          score: (data['score'] ?? 0.0).toDouble(),
-          reason: data['reason'] ?? '',
-        ));
+        return MapEntry(
+          key,
+          ScanResult(
+            id: data['id'] ?? '',
+            sender: data['sender'] ?? '',
+            message: data['message'] ?? '',
+            prediction: data['prediction'] ?? 'safe',
+            isScam: data['isScam'] ?? false,
+            timestamp: DateTime.parse(
+              data['timestamp'] ?? DateTime.now().toIso8601String(),
+            ),
+            dateTime: DateTime.parse(
+              data['dateTime'] ?? DateTime.now().toIso8601String(),
+            ),
+            score: double.tryParse(data['score']?.toString() ?? '0') ?? 0.0,
+            reason: data['reason'] ?? '',
+            probability:
+                double.tryParse(data['probability']?.toString() ?? '0') ??
+                    0.0, // ✅ เพิ่ม
+            label: data['label']?.toString() ?? 'safe', // ✅ เพิ่ม
+          ),
+        );
       });
     } catch (e) {
       debugPrint('Error loading cache: $e');
       _scanCache = {};
     }
   }
-  
+
   Future<void> _saveCache() async {
     try {
       final cacheData = _scanCache.map((key, value) => MapEntry(key, {
-        'id': value.id,
-        'sender': value.sender,
-        'message': value.message,
-        'prediction': value.prediction,
-        'isScam': value.isScam,
-        'timestamp': value.timestamp.toIso8601String(),
-        'dateTime': value.dateTime.toIso8601String(),
-        'score': value.score,
-        'reason': value.reason,
-      }));
-      
+            'id': value.id,
+            'sender': value.sender,
+            'message': value.message,
+            'prediction': value.prediction,
+            'isScam': value.isScam,
+            'timestamp': value.timestamp.toIso8601String(),
+            'dateTime': value.dateTime.toIso8601String(),
+            'score': value.score,
+            'reason': value.reason,
+            'probability': value.probability, // ✅ เพิ่ม
+            'label': value.label, // ✅ เพิ่ม
+          }));
+
       final cacheString = json.encode(cacheData);
       await _prefs?.setString('sms_scan_cache', cacheString);
     } catch (e) {
       debugPrint('Error saving cache: $e');
     }
   }
-  
+
   Future<void> _loadModelAndData() async {
     if (isLoading) return;
-    
+
     setState(() {
       isLoading = true;
     });
-    
+
+    _refreshController.reset();
     _refreshController.repeat();
-    
+
     try {
       // ✅ ทดสอบการเชื่อมต่อ API แทนการโหลดโมเดล
       final connected = await ApiService.testConnection();
       setState(() => modelReady = connected);
-      
+
       if (connected) {
         // โหลดและวิเคราะห์ข้อความ
         await _loadAndAnalyzeSMS();
@@ -138,112 +151,188 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
     }
   }
-  
+
   Future<void> _loadAndAnalyzeSMS() async {
     try {
-      bool permissionGranted = await telephony.requestPhoneAndSmsPermissions ?? false;
+      // ✅ ขอ permission (ตัว API เป็น getter ไม่ใช่เมธอด)
+      bool permissionGranted =
+          (await telephony.requestPhoneAndSmsPermissions) ?? false;
+
+      if (!permissionGranted) {
+        // บางเวอร์ชันมี getter นี้ด้วย
+        permissionGranted = (await telephony.requestSmsPermissions) ?? false;
+      }
 
       if (!permissionGranted) {
         _showError('ไม่ได้รับสิทธิ์เข้าถึง SMS');
         return;
       }
-      
-      final messages = await telephony.getInboxSms(
+
+// ✅ ตรวจสถานะโมเดล
+      if (!modelReady) {
+        _showError('API ยังไม่พร้อมใช้งาน');
+        return;
+      }
+
+      // ✅ โหลด SMS ล่าสุด 100 ข้อความ
+      final messages = (await telephony.getInboxSms(
         columns: [SmsColumn.ADDRESS, SmsColumn.BODY, SmsColumn.DATE],
-      );
-      
-      List<ScanResult> results = [];
-      int scamCount = 0;
-      int safeCount = 0;
-      
-      for (var msg in messages) {
+      ))
+          .where((m) => (m.body ?? '').trim().isNotEmpty) // ตัดข้อความว่าง
+          .take(100)
+          .toList();
+
+      // ถ้า protection ปิด → แค่แสดงผล ไม่วิเคราะห์
+      if (!protectionEnabled) {
+        final results = messages.map((msg) {
+          final sender = msg.address ?? 'ไม่ทราบเบอร์';
+          final text = msg.body ?? '';
+          final date =
+              DateTime.fromMillisecondsSinceEpoch(msg.date ?? 0, isUtc: false);
+          return ScanResult(
+            id: '${msg.id ?? date.millisecondsSinceEpoch}',
+            sender: sender,
+            message: text,
+            prediction: 'safe',
+            probability: 0.0, // ✅ เติมให้ครบตามโมเดล
+            timestamp: date,
+            dateTime: date,
+            isScam: false,
+            score: 0.0,
+            reason: 'ระบบป้องกันปิดอยู่',
+            label: 'safe', // ✅ ถ้าโมเดลมีฟิลด์นี้
+          );
+        }).toList();
+
+        if (mounted) {
+          setState(() {
+            scanResults = results;
+            messagesCheckedToday = results.length;
+            scamDetectedToday = 0;
+            safeMessagesToday = results.length;
+          });
+        }
+        return;
+      }
+
+      // ✅ เตรียมรายการที่จะวิเคราะห์
+      final toAnalyze = <String>[];
+      final prepared = <ScanResult>[];
+
+      for (final msg in messages) {
         final sender = msg.address ?? 'ไม่ทราบเบอร์';
         final text = msg.body ?? '';
-        final date = DateTime.fromMillisecondsSinceEpoch(msg.date ?? 0);
-        
-        if (text.trim().isEmpty) continue;
-        
-        ScanResult result;
-        
-        // ตรวจสอบ cache ก่อน
-        if (_scanCache.containsKey(text)) {
-          result = _scanCache[text]!;
+        final date =
+            DateTime.fromMillisecondsSinceEpoch(msg.date ?? 0, isUtc: false);
+
+        final cacheKey = '$sender|${date.millisecondsSinceEpoch}|$text';
+
+        if (_scanCache.containsKey(cacheKey)) {
+          prepared.add(_scanCache[cacheKey]!);
         } else {
-          // ✅ วิเคราะห์ข้อความด้วย API Service
-          final apiResult = await ApiService.checkMessage(text);
-          
-          // สร้าง ScanResult object
-          if (apiResult['success'] == true) {
-            result = ScanResult(
-              id: '${msg.id ?? DateTime.now().millisecondsSinceEpoch}',
-              sender: sender,
-              message: text,
-              prediction: apiResult['prediction'] ?? 'safe',
-              timestamp: date,
-              dateTime: date,
-              isScam: apiResult['isScam'] ?? false,
-              score: apiResult['isScam'] == true ? 0.8 : 0.2, // ประมาณการคะแนน
-              reason: 'วิเคราะห์ด้วย AI API - ${apiResult['prediction']}',
-            );
-          } else {
-            // ถ้า API ไม่สำเร็จ ให้ถือว่าปลอดภัย
-            result = ScanResult(
-              id: '${msg.id ?? DateTime.now().millisecondsSinceEpoch}',
-              sender: sender,
-              message: text,
-              prediction: 'safe',
-              timestamp: date,
-              dateTime: date,
-              isScam: false,
-              score: 0.0,
-              reason: 'ไม่สามารถวิเคราะห์ได้ - ${apiResult['error']}',
-            );
-          }
-          
-          // เพิ่มเข้า cache
-          _scanCache[text] = result;
-        }
-        
-        results.add(result);
-        
-        if (result.isScam) {
-          scamCount++;
-        } else {
-          safeCount++;
+          toAnalyze.add(text);
+          prepared.add(ScanResult(
+            id: '${msg.id ?? date.millisecondsSinceEpoch}',
+            sender: sender,
+            message: text,
+            prediction: 'safe',
+            probability: 0.0, // ✅
+            timestamp: date,
+            dateTime: date,
+            isScam: false,
+            score: 0.0,
+            reason: 'กำลังวิเคราะห์...',
+            label: 'safe', // ✅
+          ));
         }
       }
-      
+
+      // ✅ วิเคราะห์ batch เฉพาะข้อความใหม่
+      if (toAnalyze.isNotEmpty) {
+        final batch =
+            await ApiService.checkMessagesBatch(toAnalyze, explain: true);
+        if (batch['success'] == true) {
+          final results = (batch['results'] as List)
+              .map((e) => e as Map<String, dynamic>)
+              .toList();
+
+          int analyzedIdx = 0;
+          for (int i = 0; i < prepared.length; i++) {
+            if (prepared[i].reason == 'กำลังวิเคราะห์...') {
+              final r = results[analyzedIdx++];
+              final label = (r['label']?.toString() ?? 'safe').toLowerCase();
+              final score =
+                  double.tryParse(r['score']?.toString() ?? '0') ?? 0.0;
+
+              final built = prepared[i].copyWith(
+                prediction: label,
+                isScam: label == 'scam',
+                score: score,
+                probability: score, // ✅ ถ้าอยากให้ probability = score จาก API
+                reason: 'AI API (${label.toUpperCase()})',
+                label: label,
+              );
+
+              final cacheKey =
+                  '${built.sender}|${built.timestamp.millisecondsSinceEpoch}|${built.message}';
+              _scanCache[cacheKey] = built;
+              prepared[i] = built;
+            }
+          }
+        } else {
+          _showError('Batch API ล้มเหลว: ${batch['error']}');
+        }
+      }
+
+      // ✅ อัปเดต state และบันทึก cache
       if (mounted) {
+        final scamCountNow = prepared.where((e) => e.isScam).length;
         setState(() {
-          scanResults = results;
-          messagesCheckedToday = results.length;
-          scamDetectedToday = scamCount;
-          safeMessagesToday = safeCount;
+          scanResults = prepared;
+          messagesCheckedToday = prepared.length;
+          scamDetectedToday = scamCountNow;
+          safeMessagesToday = prepared.length - scamCountNow;
         });
-        
         await _saveCache();
       }
-    } catch (e) {
+    } catch (e, stack) {
       _showError('เกิดข้อผิดพลาดในการโหลดข้อความ: $e');
+      debugPrintStack(stackTrace: stack);
     }
   }
-  
+
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger != null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } else {
+      // เผื่อถูกเรียกก่อนมี Scaffold (เช่นระหว่าง initState)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      });
+    }
   }
-  
+
   void _toggleProtection() {
     setState(() {
       protectionEnabled = !protectionEnabled;
     });
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -254,7 +343,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
   void _showMessageDetail(ScanResult result) {
     showDialog(
       context: context,
@@ -274,13 +363,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               const SizedBox(height: 12),
               _buildDetailRow('เวลา:', _formatDateTime(result.dateTime)),
               const SizedBox(height: 12),
-              _buildDetailRow('คะแนนความเสี่ยง:', result.score.toStringAsFixed(3)),
+              _buildDetailRow(
+                  'คะแนนความเสี่ยง:', result.score.toStringAsFixed(3)),
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: result.isScam 
+                  color: result.isScam
                       ? Colors.red.withOpacity(0.1)
                       : Colors.green.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
@@ -321,7 +411,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
   Widget _buildDetailRow(String label, String value) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,17 +440,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ],
     );
   }
-  
+
   String _formatDateTime(DateTime dateTime) {
     return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
-  
+
   @override
   Widget build(BuildContext context) {
-    final securityScore = messagesCheckedToday == 0 
-        ? 100.0 
+    final securityScore = messagesCheckedToday == 0
+        ? 100.0
         : (safeMessagesToday / messagesCheckedToday) * 100;
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -422,7 +512,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
     );
   }
-  
+
   Widget _buildLoadingScreen() {
     return Center(
       child: Column(
@@ -431,7 +521,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           const CircularProgressIndicator(),
           const SizedBox(height: 16),
           Text(
-            modelReady 
+            modelReady
                 ? 'กำลังประมวลผลข้อความ...'
                 : 'กำลังทดสอบการเชื่อมต่อ API...',
             style: GoogleFonts.kanit(fontSize: 16),
@@ -445,15 +535,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
   Widget _buildGreeting() {
     final hour = DateTime.now().hour;
-    final greeting = hour < 12 
-        ? 'สวัสดีตอนเช้า' 
-        : hour < 17 
-            ? 'สวัสดีตอนบ่าย' 
+    final greeting = hour < 12
+        ? 'สวัสดีตอนเช้า'
+        : hour < 17
+            ? 'สวัสดีตอนบ่าย'
             : 'สวัสดีตอนเย็น';
-    
+
     return Text(
       '👋 $greeting!',
       style: GoogleFonts.kanit(
@@ -462,7 +552,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
   Widget _buildModelStatus() {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 500),
@@ -483,22 +573,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
           const SizedBox(width: 8),
           Text(
-            modelReady 
-                ? '✅ API พร้อมใช้งาน'
-                : '⏳ กำลังเชื่อมต่อ API...',
+            modelReady ? '✅ API พร้อมใช้งาน' : '⏳ กำลังเชื่อมต่อ API...',
             style: GoogleFonts.kanit(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: modelReady 
-                  ? Colors.green.shade800 
-                  : Colors.orange.shade800,
+              color:
+                  modelReady ? Colors.green.shade800 : Colors.orange.shade800,
             ),
           ),
         ],
       ),
     );
   }
-  
+
   Widget _buildProtectionStatus() {
     String statusText;
     Color statusColor;
@@ -549,12 +636,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
   Widget _buildSecurityScore(double score) {
-    final scoreColor = score > 80 
-        ? Colors.green 
-        : score > 50 
-            ? Colors.orange 
+    final scoreColor = score > 80
+        ? Colors.green
+        : score > 50
+            ? Colors.orange
             : Colors.red;
 
     return FadeTransition(
@@ -602,7 +689,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
   Widget _buildStatsCards() {
     return SlideTransition(
       position: Tween<Offset>(
@@ -644,8 +731,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
   }
-  
-  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
+
+  Widget _buildStatCard(
+      String label, String value, IconData icon, Color color) {
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -677,8 +765,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
   Widget _buildRecentScansList() {
+    final displayedResults = scanResults.take(20).toList(); // ✅ ประกาศก่อน
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -730,10 +820,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ListView.separated(
             physics: const NeverScrollableScrollPhysics(),
             shrinkWrap: true,
-            itemCount: scanResults.take(20).length,
+            itemCount: displayedResults.length,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
-              final result = scanResults[index];
+              final result = displayedResults[index];
               return Card(
                 elevation: 2,
                 shape: RoundedRectangleBorder(
@@ -745,7 +835,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: result.isScam 
+                      color: result.isScam
                           ? Colors.red.withOpacity(0.1)
                           : Colors.green.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
@@ -804,7 +894,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: result.isScam 
+                              color: result.isScam
                                   ? Colors.red.withOpacity(0.1)
                                   : Colors.green.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(12),
@@ -814,7 +904,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               style: GoogleFonts.kanit(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
-                                color: result.isScam ? Colors.red : Colors.green,
+                                color:
+                                    result.isScam ? Colors.red : Colors.green,
                               ),
                             ),
                           ),

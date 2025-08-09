@@ -11,7 +11,8 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObserver {
+class _SettingsScreenState extends State<SettingsScreen>
+    with WidgetsBindingObserver {
   bool protectionEnabled = true;
   double notificationSensitivity = 0.5;
   bool darkModeEnabled = false;
@@ -50,10 +51,12 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
     if (!mounted) return;
     setState(() {
       protectionEnabled = prefs.getBool('protectionEnabled') ?? true;
-      notificationSensitivity = prefs.getDouble('notificationSensitivity') ?? 0.5;
+      notificationSensitivity =
+          prefs.getDouble('notificationSensitivity') ?? 0.5;
       darkModeEnabled = prefs.getBool('darkModeEnabled') ?? false;
     });
-    widget.themeModeNotifier.value = darkModeEnabled ? ThemeMode.dark : ThemeMode.light;
+    widget.themeModeNotifier.value =
+        darkModeEnabled ? ThemeMode.dark : ThemeMode.light;
   }
 
   Future<void> _checkPermissions() async {
@@ -90,7 +93,8 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
   Future<void> _saveNotificationSensitivity(double value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('notificationSensitivity', value);
-    _showSnackBar('ระดับความไวการแจ้งเตือนถูกตั้งเป็น ${(value * 100).round()}%');
+    _showSnackBar(
+        'ระดับความไวการแจ้งเตือนถูกตั้งเป็น ${(value * 100).round()}%');
   }
 
   Future<void> _saveDarkModeEnabled(bool value) async {
@@ -122,92 +126,93 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
     widget.themeModeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
   }
 
-Widget _buildPermissionCard(String title, String subtitle, bool granted, VoidCallback onTap) {
-final theme = Theme.of(context);
-final iconColor = granted ? theme.colorScheme.primary : theme.colorScheme.error;
-final backgroundColor = granted
-    ? theme.colorScheme.primary.withOpacity(0.1)
-    : theme.colorScheme.error.withOpacity(0.1);
+  Widget _buildPermissionCard(
+      String title, String subtitle, bool granted, VoidCallback onTap) {
+    final theme = Theme.of(context);
+    final iconColor =
+        granted ? theme.colorScheme.primary : theme.colorScheme.error;
+    final backgroundColor = granted
+        ? theme.colorScheme.primary.withOpacity(0.1)
+        : theme.colorScheme.error.withOpacity(0.1);
 
-  final borderColor = granted
-      ? theme.colorScheme.primary.withOpacity(0.3)
-      : theme.colorScheme.error.withOpacity(0.3);
+    final borderColor = granted
+        ? theme.colorScheme.primary.withOpacity(0.3)
+        : theme.colorScheme.error.withOpacity(0.3);
 
-  return Container(
-    margin: const EdgeInsets.only(bottom: 12),
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(
-        color: borderColor,
-        width: 1.5,
-      ),
-    ),
-    child: ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          granted ? Icons.check_circle : Icons.error,
-          color: iconColor,
-          size: 24,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: borderColor,
+          width: 1.5,
         ),
       ),
-      title: Text(
-        title,
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Text(subtitle),
-      trailing: Chip(
-        label: Text(
-          granted ? 'เปิดแล้ว' : 'ยังไม่เปิด',
-          style: TextStyle(
-            color: iconColor,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        backgroundColor: backgroundColor,
-        side: BorderSide.none,
-      ),
-      onTap: granted ? null : onTap,
-    ),
-  );
-}
-
-
-  Widget _buildSectionHeader(String title, IconData icon) {
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 16),
-    child: Row(
-      children: [
-        Container(
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            color: backgroundColor,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(
-            icon,
-            color: Theme.of(context).colorScheme.primary,
-            size: 20,
+            granted ? Icons.check_circle : Icons.error,
+            color: iconColor,
+            size: 24,
           ),
         ),
-        const SizedBox(width: 12),
-        Text(
+        title: Text(
           title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
-      ],
-    ),
-  );
-}
+        subtitle: Text(subtitle),
+        trailing: Chip(
+          label: Text(
+            granted ? 'เปิดแล้ว' : 'ยังไม่เปิด',
+            style: TextStyle(
+              color: iconColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          backgroundColor: backgroundColor,
+          side: BorderSide.none,
+        ),
+        onTap: granted ? null : onTap,
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              icon,
+              color: Theme.of(context).colorScheme.primary,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildActionButton({
     required String label,
@@ -226,7 +231,8 @@ final backgroundColor = granted
           backgroundColor: backgroundColor,
           foregroundColor: foregroundColor,
           padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
         onPressed: onPressed,
       ),
@@ -291,7 +297,8 @@ final backgroundColor = granted
         setState(() {
           notificationPermission = false; // ต้องให้ผู้ใช้เปิดเอง
         });
-        _showSnackBar('โปรดเปิดสิทธิ์ Notification Listener สำหรับแอป Anti Scam AI ในหน้าตั้งค่าที่เปิดขึ้น');
+        _showSnackBar(
+            'โปรดเปิดสิทธิ์ Notification Listener สำหรับแอป Anti Scam AI ในหน้าตั้งค่าที่เปิดขึ้น');
       } catch (e) {
         debugPrint('Request Notification permission failed: $e');
         _showSnackBar('ขอสิทธิ์ Notification Listener ล้มเหลว');
@@ -303,33 +310,35 @@ final backgroundColor = granted
 
   Future<void> _requestAccessibilityPermission() async {
     try {
-      final bool granted = await platform.invokeMethod('requestAccessibilityPermission');
+      final bool granted =
+          await platform.invokeMethod('requestAccessibilityPermission');
       if (!mounted) return;
       setState(() {
         accessibilityPermission = granted;
       });
-      _showSnackBar(granted ? 'สิทธิ์ Accessibility ถูกอนุญาตแล้ว' : 'ไม่ได้รับสิทธิ์ Accessibility');
+      _showSnackBar(granted
+          ? 'สิทธิ์ Accessibility ถูกอนุญาตแล้ว'
+          : 'ไม่ได้รับสิทธิ์ Accessibility');
     } catch (e) {
       debugPrint('Request Accessibility permission failed: $e');
     }
   }
 
   Future<void> _launchEmail() async {
-  final Uri emailLaunchUri = Uri(
-    scheme: 'mailto',
-    path: 'antiscamai@gmail.com', // ← แก้ตรงนี้
-    queryParameters: {
-      'subject': 'สอบถาม Anti Scam AI',
-    },
-  );
+    final Uri emailLaunchUri = Uri(
+      scheme: 'mailto',
+      path: 'antiscamai@gmail.com', // ← แก้ตรงนี้
+      queryParameters: {
+        'subject': 'สอบถาม Anti Scam AI',
+      },
+    );
 
-  if (await canLaunchUrl(emailLaunchUri)) {
-    await launchUrl(emailLaunchUri);
-  } else {
-    _showSnackBar('ไม่สามารถเปิดแอปอีเมลได้');
+    if (await canLaunchUrl(emailLaunchUri)) {
+      await launchUrl(emailLaunchUri);
+    } else {
+      _showSnackBar('ไม่สามารถเปิดแอปอีเมลได้');
+    }
   }
-}
-
 
   @override
   Widget build(BuildContext context) {
@@ -543,7 +552,8 @@ final backgroundColor = granted
               child: Column(
                 children: [
                   ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
@@ -561,7 +571,8 @@ final backgroundColor = granted
                       showDialog(
                         context: context,
                         builder: (context) => AlertDialog(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
                           title: const Text('คู่มือการใช้งาน'),
                           content: const Text(
                             'แอปนี้จะขอสิทธิ์อ่าน SMS, Notification Listener และ Accessibility เพื่อช่วยตรวจจับข้อความหลอกลวงและแจ้งเตือนคุณ\n\n'
@@ -579,7 +590,8 @@ final backgroundColor = granted
                   ),
                   const Divider(height: 1),
                   ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
@@ -598,7 +610,7 @@ final backgroundColor = granted
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 20),
           ],
         ),

@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'firebase_options.dart';
-import 'screens/models/scan_result.dart'; // เพิ่มบรรทัดนี้
 
+import 'screens/models/scan_result.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
@@ -18,85 +16,27 @@ import 'screens/main/stats_screen.dart';
 import 'screens/main/user_screen.dart';
 import 'screens/main/settings_screen.dart';
 
-// ✅ Global Notifiers
-final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.system);
+// ✅ ใช้ ApiService จากไฟล์แยก
+import 'services/api_service.dart';
+
+// === Globals (ใช้ได้ทั้งแอป) ===
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final ValueNotifier<ThemeMode> themeModeNotifier =
+    ValueNotifier(ThemeMode.system);
 
-// ✅ Native Channel communication
+// Native channels ต้องตรงกับฝั่ง Android (MainActivity.kt)
 const MethodChannel methodChannel = MethodChannel('message_monitor');
-const EventChannel eventChannel = EventChannel('com.example.anti_scam_ai/accessibility');
-
-// ✅ API Configuration - แก้ไข URL ตรงนี้หลัง Deploy บน Render
-class ApiService {
-  static const String baseUrl = 'https://backend-api-j5m6.onrender.com'; // ⚠️ เปลี่ยน URL ให้ตรงกับ Render
-  static const String predictEndpoint = '/predict';
-  
-  // ตรวจสอบข้อความผ่าน API
-  static Future<Map<String, dynamic>> checkMessage(String message) async {
-    final url = Uri.parse('$baseUrl$predictEndpoint');
-    
-    try {
-      debugPrint('🌐 Calling API: $url');
-      debugPrint('📤 Message: $message');
-      
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({'message': message}),
-      ).timeout(const Duration(seconds: 30));
-
-      debugPrint('📥 Response status: ${response.statusCode}');
-      debugPrint('📥 Response body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return {
-          'success': true,
-          'prediction': data['prediction'],
-          'isScam': data['prediction'] == 'scam',
-        };
-      } else {
-        return {
-          'success': false,
-          'error': 'API returned status ${response.statusCode}',
-        };
-      }
-    } catch (e) {
-      debugPrint('❌ API Error: $e');
-      return {
-        'success': false,
-        'error': 'Network error: $e',
-      };
-    }
-  }
-  
-  // ทดสอบการเชื่อมต่อ API
-  static Future<bool> testConnection() async {
-    try {
-      final response = await http.get(
-        Uri.parse(baseUrl),
-        headers: {'Accept': 'text/html'},
-      ).timeout(const Duration(seconds: 10));
-      
-      return response.statusCode == 200;
-    } catch (e) {
-      debugPrint('❌ Connection test failed: $e');
-      return false;
-    }
-  }
-}
+const EventChannel eventChannel =
+    EventChannel('com.example.anti_scam_ai/accessibility');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
+
   // ทดสอบการเชื่อมต่อ API เมื่อเริ่มแอป
   final connected = await ApiService.testConnection();
   debugPrint('🌐 API Connection: ${connected ? "✅ Connected" : "❌ Failed"}');
-  
+
   runApp(const MyApp());
 }
 
@@ -108,62 +48,65 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  List<ScanResult> someScanResults = [];
+
   @override
   void initState() {
     super.initState();
     requestPermissions();
     listenToNativeEvents();
   }
-List<ScanResult> someScanResults = [];
-  // ✅ แก้ไขการขอสิทธิ์ให้เรียก method ที่มีใน Android
+
+  /// ✅ ขอสิทธิ์จาก Native (Android)
   Future<void> requestPermissions() async {
     try {
-      // เรียกขอสิทธิ์ SMS ก่อน
-      final smsGranted = await methodChannel.invokeMethod<bool>('requestSmsPermission');
+      final smsGranted =
+          await methodChannel.invokeMethod<bool>('requestSmsPermission');
       debugPrint('📱 SMS Permission granted: $smsGranted');
-      
-      // เรียกขอสิทธิ์ Notification Listener
-      final notifGranted = await methodChannel.invokeMethod<bool>('requestNotificationListenerPermission');
+
+      final notifGranted = await methodChannel
+          .invokeMethod<bool>('requestNotificationListenerPermission');
       debugPrint('🔔 Notification Permission granted: $notifGranted');
-      
-      // หากต้องการขอสิทธิ์ Accessibility (ถ้ามี)
+
       try {
-        final accessibilityGranted = await methodChannel.invokeMethod<bool>('requestAccessibilityPermission');
+        final accessibilityGranted = await methodChannel
+            .invokeMethod<bool>('requestAccessibilityPermission');
         debugPrint('♿ Accessibility Permission granted: $accessibilityGranted');
       } catch (e) {
         debugPrint('ℹ️ Accessibility permission method not found: $e');
       }
-      
     } catch (e) {
       debugPrint('❌ Error requesting permissions: $e');
       _showErrorDialog('เกิดข้อผิดพลาด', 'ไม่สามารถขอสิทธิ์ได้: $e');
     }
   }
 
-  // ✅ ฟัง EventChannel จาก Native แล้วตรวจสอบข้อความผ่าน AI
+  /// ✅ ฟัง EventChannel จาก Native แล้วตรวจสอบข้อความผ่าน AI
   void listenToNativeEvents() {
     eventChannel.receiveBroadcastStream().listen((event) async {
       debugPrint('📲 Event received: $event');
 
-      // ตรวจสอบข้อความผ่าน AI API
-      if (event != null && event.toString().isNotEmpty) {
+      if (event != null && event.toString().trim().isNotEmpty) {
         final result = await ApiService.checkMessage(event.toString());
-        
+
         final context = navigatorKey.currentContext;
-        if (context != null) {
-          if (result['success'] == true) {
-            if (result['isScam'] == true) {
-              // แจ้งเตือนข้อความ Scam
-              _showScamAlert(context, event.toString(), result['prediction']);
-            } else {
-              // ข้อความปลอดภัย - อาจจะไม่ต้องแจ้งเตือน หรือแจ้งแบบเบาๆ
-              debugPrint('✅ Message is safe: $event');
-              _showSafeNotification(context);
-            }
+        if (context == null) return;
+
+        if (result['success'] == true) {
+          if (result['isScam'] == true) {
+            _showScamAlert(
+              context,
+              event.toString(),
+              result['label'] ?? 'unknown',
+              (result['score'] ?? 0.0).toDouble(),
+            );
           } else {
-            // API Error
-            _showErrorDialog('ข้อผิดพลาด API', result['error'] ?? 'Unknown error');
+            debugPrint('✅ Message is safe: $event');
+            _showSafeNotification(context);
           }
+        } else {
+          _showErrorDialog(
+              'ข้อผิดพลาด API', result['error'] ?? 'Unknown error');
         }
       }
     }, onError: (error) {
@@ -172,21 +115,24 @@ List<ScanResult> someScanResults = [];
     });
   }
 
-  // แสดง Alert เมื่อพบข้อความ Scam
-  void _showScamAlert(BuildContext context, String message, String prediction) {
+  /// 🚨 แจ้งเตือนเมื่อเจอ Scam
+  void _showScamAlert(
+      BuildContext context, String message, String label, double score) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
         icon: const Icon(Icons.warning, color: Colors.red, size: 48),
-        title: const Text('🚨 ตรวจพบข้อความต้องสงสัย!', 
-                         style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+        title: const Text(
+          '🚨 ตรวจพบข้อความต้องสงสัย!',
+          style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('ข้อความนี้อาจเป็น SCAM:',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
+                style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(12),
@@ -198,8 +144,11 @@ List<ScanResult> someScanResults = [];
               child: Text(message, style: const TextStyle(fontSize: 14)),
             ),
             const SizedBox(height: 12),
-            Text('AI Prediction: ${prediction.toUpperCase()}',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+            Text(
+              'AI Label: ${label.toUpperCase()} • Score: ${score.toStringAsFixed(2)}',
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.red),
+            ),
           ],
         ),
         actions: [
@@ -212,7 +161,8 @@ List<ScanResult> someScanResults = [];
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('เข้าใจแล้ว', style: TextStyle(color: Colors.white)),
+            child:
+                const Text('เข้าใจแล้ว', style: TextStyle(color: Colors.white)),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
@@ -220,7 +170,7 @@ List<ScanResult> someScanResults = [];
     );
   }
 
-  // แจ้งเตือนเบาๆ เมื่อข้อความปลอดภัย
+  /// ✅ ข้อความปลอดภัย
   void _showSafeNotification(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -237,7 +187,7 @@ List<ScanResult> someScanResults = [];
     );
   }
 
-  // แสดง Error Dialog
+  /// ❌ Error Dialog
   void _showErrorDialog(String title, String message) {
     final context = navigatorKey.currentContext;
     if (context != null) {
@@ -257,7 +207,7 @@ List<ScanResult> someScanResults = [];
     }
   }
 
-  // แสดง Error SnackBar
+  /// ⚠ Error SnackBar
   void _showErrorSnackBar(String message) {
     final context = navigatorKey.currentContext;
     if (context != null) {
@@ -297,15 +247,17 @@ List<ScanResult> someScanResults = [];
             '/register': (context) => const RegisterScreen(),
             '/reset-password': (context) => const ResetPasswordScreen(),
             '/permission': (context) => const PermissionScreen(),
-            '/main': (context) => MainScreen(themeModeNotifier: themeModeNotifier),
+            '/main': (context) =>
+                MainScreen(themeModeNotifier: themeModeNotifier),
             '/home': (context) => const HomeScreen(),
             '/scan': (context) => const ScanScreen(),
-            '/stats': (context) => StatsScreen(scanResults: someScanResults),
+            '/stats': (context) => const StatsScreen(),
             '/profile': (context) => const UserScreen(),
             '/login': (context) => const LoginScreen(),
-            '/settings': (context) => SettingsScreen(themeModeNotifier: themeModeNotifier),
+            '/settings': (context) =>
+                SettingsScreen(themeModeNotifier: themeModeNotifier),
             '/history': (context) => const HistoryScreen(),
-            '/test-api': (context) => const ApiTestScreen(), // เพิ่มหน้าทดสอบ API
+            '/test-api': (context) => const ApiTestScreen(),
           },
         );
       },
@@ -395,14 +347,14 @@ class _ApiTestScreenState extends State<ApiTestScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: _result.contains('SCAM') 
+                  color: _result.contains('SCAM')
                       ? Colors.red.withOpacity(0.1)
                       : _result.contains('SAFE')
                           ? Colors.green.withOpacity(0.1)
                           : Colors.orange.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: _result.contains('SCAM') 
+                    color: _result.contains('SCAM')
                         ? Colors.red
                         : _result.contains('SAFE')
                             ? Colors.green
@@ -414,7 +366,7 @@ class _ApiTestScreenState extends State<ApiTestScreen> {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: _result.contains('SCAM') 
+                    color: _result.contains('SCAM')
                         ? Colors.red
                         : _result.contains('SAFE')
                             ? Colors.green
@@ -430,7 +382,8 @@ class _ApiTestScreenState extends State<ApiTestScreen> {
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            _buildExampleButton('คุณได้รับรางวัล 1 ล้านบาท! กดลิงก์เพื่อรับทันที'),
+            _buildExampleButton(
+                'คุณได้รับรางวัล 1 ล้านบาท! กดลิงก์เพื่อรับทันที'),
             _buildExampleButton('ยืนยันบัญชีธนาคารของคุณ คลิกที่นี่'),
             _buildExampleButton('สวัสดี ทำงานอะไรอยู่'),
           ],
