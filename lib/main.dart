@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:telephony/telephony.dart';
 import 'firebase_options.dart';
 
 import 'screens/models/scan_result.dart';
@@ -16,24 +17,27 @@ import 'screens/main/stats_screen.dart';
 import 'screens/main/user_screen.dart';
 import 'screens/main/settings_screen.dart';
 
-// ✅ ใช้ ApiService จากไฟล์แยก
 import 'services/api_service.dart';
+import 'background/sms_background_handler.dart';
 
-// === Globals (ใช้ได้ทั้งแอป) ===
+// === Globals ===
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final ValueNotifier<ThemeMode> themeModeNotifier =
     ValueNotifier(ThemeMode.system);
 
-// Native channels ต้องตรงกับฝั่ง Android (MainActivity.kt)
+// Native Channels ต้องตรงกับ MainActivity.kt
 const MethodChannel methodChannel = MethodChannel('message_monitor');
 const EventChannel eventChannel =
     EventChannel('com.example.anti_scam_ai/accessibility');
+
+// ★ NEW: EventChannel สำหรับ BG Updates
+const EventChannel bgUpdatesChannel =
+    EventChannel('com.example.anti_scam_ai/bg_updates');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // ทดสอบการเชื่อมต่อ API เมื่อเริ่มแอป
   final connected = await ApiService.testConnection();
   debugPrint('🌐 API Connection: ${connected ? "✅ Connected" : "❌ Failed"}');
 
@@ -49,15 +53,42 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   List<ScanResult> someScanResults = [];
+  final Telephony telephony = Telephony.instance;
 
   @override
   void initState() {
     super.initState();
     requestPermissions();
     listenToNativeEvents();
+    listenToBgUpdates(); // ★ NEW
+    _initializeSMSBackgroundHandler();
   }
 
-  /// ✅ ขอสิทธิ์จาก Native (Android)
+  Future<void> _initializeSMSBackgroundHandler() async {
+    try {
+      final bool granted =
+          (await telephony.requestPhoneAndSmsPermissions) ?? false;
+      if (!granted) {
+        debugPrint('❌ Telephony permissions denied');
+        return;
+      }
+
+      telephony.listenIncomingSms(
+        onNewMessage: (SmsMessage msg) {
+          debugPrint('📩 onNewMessage: ${msg.address} -> ${msg.body}');
+        },
+        onBackgroundMessage: smsBackgroundHandler,
+        listenInBackground: true,
+      );
+
+      debugPrint('✅ SMS Background Handler listening...');
+    } catch (e, st) {
+      debugPrint('❌ Init BG handler error: $e');
+      debugPrintStack(stackTrace: st);
+    }
+  }
+
+  /// ขอสิทธิ์จาก Native
   Future<void> requestPermissions() async {
     try {
       final smsGranted =
@@ -81,14 +112,13 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
-  /// ✅ ฟัง EventChannel จาก Native แล้วตรวจสอบข้อความผ่าน AI
+  /// ฟัง EventChannel Accessibility
   void listenToNativeEvents() {
     eventChannel.receiveBroadcastStream().listen((event) async {
       debugPrint('📲 Event received: $event');
 
       if (event != null && event.toString().trim().isNotEmpty) {
         final result = await ApiService.checkMessage(event.toString());
-
         final context = navigatorKey.currentContext;
         if (context == null) return;
 
@@ -101,7 +131,6 @@ class _MyAppState extends State<MyApp> {
               (result['score'] ?? 0.0).toDouble(),
             );
           } else {
-            debugPrint('✅ Message is safe: $event');
             _showSafeNotification(context);
           }
         } else {
@@ -115,7 +144,25 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
-  /// 🚨 แจ้งเตือนเมื่อเจอ Scam
+  /// ★ NEW: ฟัง EventChannel ของ BG Updates
+  void listenToBgUpdates() {
+    bgUpdatesChannel.receiveBroadcastStream().listen((event) {
+      debugPrint('📡 BG Update event: $event');
+
+      final ctx = navigatorKey.currentContext;
+      if (ctx != null) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(
+            content: Text('📩 ข้อความใหม่จาก BG: $event'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }, onError: (error) {
+      debugPrint('⚠️ BG Updates channel error: $error');
+    });
+  }
+
   void _showScamAlert(
       BuildContext context, String message, String label, double score) {
     showDialog(
@@ -154,10 +201,7 @@ class _MyAppState extends State<MyApp> {
         actions: [
           TextButton(
             child: const Text('รายงาน'),
-            onPressed: () {
-              Navigator.of(context).pop();
-              // TODO: ไปหน้ารายงาน
-            },
+            onPressed: () => Navigator.of(context).pop(),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -170,7 +214,6 @@ class _MyAppState extends State<MyApp> {
     );
   }
 
-  /// ✅ ข้อความปลอดภัย
   void _showSafeNotification(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -187,7 +230,6 @@ class _MyAppState extends State<MyApp> {
     );
   }
 
-  /// ❌ Error Dialog
   void _showErrorDialog(String title, String message) {
     final context = navigatorKey.currentContext;
     if (context != null) {
@@ -207,7 +249,6 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
-  /// ⚠ Error SnackBar
   void _showErrorSnackBar(String message) {
     final context = navigatorKey.currentContext;
     if (context != null) {
@@ -265,7 +306,7 @@ class _MyAppState extends State<MyApp> {
   }
 }
 
-// ✅ หน้าทดสอบ API (สำหรับ Debug)
+// === API Test Screen ===
 class ApiTestScreen extends StatefulWidget {
   const ApiTestScreen({super.key});
 
@@ -375,38 +416,7 @@ class _ApiTestScreenState extends State<ApiTestScreen> {
                   textAlign: TextAlign.center,
                 ),
               ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const Text(
-              'ตัวอย่างข้อความทดสอบ:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            _buildExampleButton(
-                'คุณได้รับรางวัล 1 ล้านบาท! กดลิงก์เพื่อรับทันที'),
-            _buildExampleButton('ยืนยันบัญชีธนาคารของคุณ คลิกที่นี่'),
-            _buildExampleButton('สวัสดี ทำงานอะไรอยู่'),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildExampleButton(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: SizedBox(
-        width: double.infinity,
-        child: OutlinedButton(
-          onPressed: () {
-            _controller.text = text;
-          },
-          child: Text(
-            text,
-            style: const TextStyle(fontSize: 12),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
         ),
       ),
     );
